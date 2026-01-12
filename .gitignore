@@ -1,0 +1,22 @@
+# Node
+node_modules/
+
+# Build output
+dist/
+lib/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+.venv/
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
