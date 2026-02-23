@@ -1,12 +1,22 @@
+// protocol/tsconfig.json
 {
   "compilerOptions": {
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "Bundler",
     "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
     "outDir": "dist",
+    "rootDir": "src",
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@core/*": ["../core/*"]
+    }
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

@@ -1,18 +1,43 @@
 {
   "name": "@verisphere/protocol",
   "version": "0.1.0",
-  "private": true,
+  "description": "VeriSphere Protocol SDK",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test"
+    "dev": "tsc -p tsconfig.json --watch",
+    "generate-abis": "tsx script/generate-abis.ts",
+    "prebuild": "npm run generate-abis",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "verisphere",
+    "blockchain",
+    "protocol"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/verisphere"
   },
   "dependencies": {
     "ethers": "^6.13.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "tsx": "^4.0.0"
   }
 }

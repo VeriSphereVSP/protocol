@@ -1,17 +1,19 @@
+// protocol/src/client.ts
 import { Contract, JsonRpcProvider, Wallet } from "ethers";
-import { LinkGraphABI, PostRegistryABI, ProtocolViewsABI, StakeEngineABI } from "./abis.js";
+import {
+  PostRegistryABI,
+  StakeEngineABI,
+  LinkGraphABI,
+  ProtocolViewsABI,
+} from "./abis.js";
+import type { ContractAddresses } from "./types.js"; // ← only new import
 
-export type Addresses = {
-  postRegistry: string;
-  stakeEngine: string;
-  linkGraph: string;
-  protocolViews?: string;
-};
+export type { ContractAddresses };
 
 export type ProtocolClientOpts = {
   rpcUrl: string;
   privateKey?: string;
-  addresses: Addresses;
+  addresses: ContractAddresses; // ← was `Addresses` (local type), now uses shared type
 };
 
 export class ProtocolClient {
@@ -25,50 +27,113 @@ export class ProtocolClient {
 
   constructor(opts: ProtocolClientOpts) {
     this.provider = new JsonRpcProvider(opts.rpcUrl);
-    this.signer = opts.privateKey ? new Wallet(opts.privateKey, this.provider) : undefined;
+
+    if (opts.privateKey) {
+      this.signer = new Wallet(opts.privateKey, this.provider);
+    }
+
     const runner = this.signer ?? this.provider;
 
-    this.postRegistry = new Contract(opts.addresses.postRegistry, PostRegistryABI, runner);
-    this.stakeEngine = new Contract(opts.addresses.stakeEngine, StakeEngineABI, runner);
-    this.linkGraph = new Contract(opts.addresses.linkGraph, LinkGraphABI, runner);
+    // Field names match ContractAddresses keys
+    this.postRegistry = new Contract(
+      opts.addresses.PostRegistry,
+      PostRegistryABI,
+      runner,
+    );
+    this.stakeEngine = new Contract(
+      opts.addresses.StakeEngine,
+      StakeEngineABI,
+      runner,
+    );
+    this.linkGraph = new Contract(
+      opts.addresses.LinkGraph,
+      LinkGraphABI,
+      runner,
+    );
 
-    if (opts.addresses.protocolViews) {
-      this.protocolViews = new Contract(opts.addresses.protocolViews, ProtocolViewsABI, runner);
+    if (opts.addresses.ProtocolViews) {
+      this.protocolViews = new Contract(
+        opts.addresses.ProtocolViews,
+        ProtocolViewsABI,
+        runner,
+      );
     }
   }
 
-  async createClaim(content: string): Promise<{ txHash: string }> {
+  // ─── Sponsored writes (require privateKey) ───────────────────────────────
+
+  async createClaim(
+    content: string,
+  ): Promise<{ txHash: string; postId?: bigint }> {
     if (!this.signer) throw new Error("createClaim requires privateKey");
-    const tx = await this.postRegistry.createPost(content);
+
+    const tx = await this.postRegistry.createClaim(content);
+    const receipt = await tx.wait();
+
+    const event = receipt.logs
+      .map((l: any) => {
+        try {
+          return this.postRegistry.interface.parseLog(l);
+        } catch {
+          return null;
+        }
+      })
+      .find((e: any) => e?.name === "PostCreated");
+
+    return { txHash: tx.hash, postId: event?.args?.postId };
+  }
+
+  async createLink(
+    independentPostId: bigint,
+    dependentPostId: bigint,
+    isChallenge: boolean,
+  ): Promise<{ txHash: string; postId?: bigint }> {
+    if (!this.signer) throw new Error("createLink requires privateKey");
+
+    const tx = await this.postRegistry.createLink(
+      independentPostId,
+      dependentPostId,
+      isChallenge,
+    );
+    const receipt = await tx.wait();
+
+    const event = receipt.logs
+      .map((l: any) => {
+        try {
+          return this.postRegistry.interface.parseLog(l);
+        } catch {
+          return null;
+        }
+      })
+      .find((e: any) => e?.name === "PostCreated");
+
+    return { txHash: tx.hash, postId: event?.args?.postId };
+  }
+
+  async stake(
+    postId: bigint,
+    side: 0 | 1, // 0 = support, 1 = challenge
+    amount: bigint, // in wei (18 decimals)
+  ): Promise<{ txHash: string }> {
+    if (!this.signer) throw new Error("stake requires privateKey");
+
+    const tx = await this.stakeEngine.stake(postId, side, amount);
     await tx.wait();
+
     return { txHash: tx.hash };
   }
 
-  async stakeSupport(postId: bigint, amount: bigint): Promise<{ txHash: string }> {
-    if (!this.signer) throw new Error("stakeSupport requires privateKey");
-    const tx = await this.stakeEngine.stake(postId, 0, amount);
-    await tx.wait();
-    return { txHash: tx.hash };
+  // ─── Read methods ─────────────────────────────────────────────────────────
+
+  async getPost(postId: bigint) {
+    return this.postRegistry.getPost(postId);
   }
 
-  async stakeChallenge(postId: bigint, amount: bigint): Promise<{ txHash: string }> {
-    if (!this.signer) throw new Error("stakeChallenge requires privateKey");
-    const tx = await this.stakeEngine.stake(postId, 1, amount);
-    await tx.wait();
-    return { txHash: tx.hash };
+  async getClaim(claimId: bigint): Promise<string> {
+    return this.postRegistry.getClaim(claimId);
   }
 
-  async linkSupport(fromId: bigint, toId: bigint): Promise<{ txHash: string }> {
-    if (!this.signer) throw new Error("linkSupport requires privateKey");
-    const tx = await this.linkGraph.link(fromId, toId, true);
-    await tx.wait();
-    return { txHash: tx.hash };
-  }
-
-  async linkChallenge(fromId: bigint, toId: bigint): Promise<{ txHash: string }> {
-    if (!this.signer) throw new Error("linkChallenge requires privateKey");
-    const tx = await this.linkGraph.link(fromId, toId, false);
-    await tx.wait();
-    return { txHash: tx.hash };
+  async getNextPostId(): Promise<bigint> {
+    return this.postRegistry.nextPostId();
   }
 }
