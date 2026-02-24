@@ -29,10 +29,23 @@ export const PostRegistryABI = [
   },
   {
     "type": "function",
+    "name": "backfillClaimHashes",
+    "inputs": [
+      {
+        "name": "postIds",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "createClaim",
     "inputs": [
       {
-        "name": "text",
+        "name": "text_",
         "type": "string",
         "internalType": "string"
       }
@@ -84,6 +97,25 @@ export const PostRegistryABI = [
         "name": "",
         "type": "address",
         "internalType": "contract IPostingFeePolicy"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "findClaim",
+    "inputs": [
+      {
+        "name": "text_",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "existingPostId",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -459,6 +491,17 @@ export const PostRegistryABI = [
   },
   {
     "type": "error",
+    "name": "DuplicateClaim",
+    "inputs": [
+      {
+        "name": "existingPostId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "ERC1967InvalidImplementation",
     "inputs": [
       {
@@ -672,6 +715,35 @@ export const StakeEngineABI = [
       },
       {
         "name": "challenge",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getUserStake",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "postId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "side",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "total",
         "type": "uint256",
         "internalType": "uint256"
       }
