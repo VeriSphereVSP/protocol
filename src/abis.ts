@@ -743,7 +743,7 @@ export const StakeEngineABI = [
     ],
     "outputs": [
       {
-        "name": "total",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -807,6 +807,19 @@ export const StakeEngineABI = [
   },
   {
     "type": "function",
+    "name": "numTranches",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "proxiableUUID",
     "inputs": [],
     "outputs": [
@@ -847,6 +860,45 @@ export const StakeEngineABI = [
   {
     "type": "function",
     "name": "sMaxLastUpdatedEpoch",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "setNumTranches",
+    "inputs": [
+      {
+        "name": "newTranches",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setSnapshotPeriod",
+    "inputs": [
+      {
+        "name": "newPeriod",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "snapshotPeriod",
     "inputs": [],
     "outputs": [
       {
@@ -944,7 +996,7 @@ export const StakeEngineABI = [
         "internalType": "uint256"
       },
       {
-        "name": "lifo",
+        "name": "",
         "type": "bool",
         "internalType": "bool"
       }
@@ -1018,6 +1070,25 @@ export const StakeEngineABI = [
   },
   {
     "type": "event",
+    "name": "NumTranchesSet",
+    "inputs": [
+      {
+        "name": "oldTranches",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newTranches",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "PostUpdated",
     "inputs": [
       {
@@ -1040,6 +1111,25 @@ export const StakeEngineABI = [
       },
       {
         "name": "challengeTotal",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SnapshotPeriodSet",
+    "inputs": [
+      {
+        "name": "oldPeriod",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newPeriod",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -1173,6 +1263,16 @@ export const StakeEngineABI = [
   {
     "type": "error",
     "name": "InvalidSide",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidSnapshotPeriod",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidTranches",
     "inputs": []
   },
   {
