@@ -1,7 +1,7 @@
 {
   "name": "@verisphere/protocol",
-  "version": "0.1.0",
-  "description": "VeriSphere Protocol SDK",
+  "version": "0.2.0",
+  "description": "VeriSphere Protocol SDK — ABIs, addresses, types, and React hooks",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -36,8 +36,28 @@
   "dependencies": {
     "ethers": "^6.13.0"
   },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "viem": "^2.0.0",
+    "wagmi": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "viem": {
+      "optional": true
+    },
+    "wagmi": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@types/react": "^18.3.28",
+    "react": "^19.2.4",
+    "tsx": "^4.0.0",
     "typescript": "^5.5.4",
-    "tsx": "^4.0.0"
+    "viem": "^2.47.0",
+    "wagmi": "^3.5.0"
   }
 }

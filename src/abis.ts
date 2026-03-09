@@ -64,12 +64,12 @@ export const PostRegistryABI = [
     "name": "createLink",
     "inputs": [
       {
-        "name": "independentPostId",
+        "name": "fromPostId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "dependentPostId",
+        "name": "toPostId",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -156,12 +156,12 @@ export const PostRegistryABI = [
         "internalType": "struct PostRegistry.Link",
         "components": [
           {
-            "name": "independentPostId",
+            "name": "fromPostId",
             "type": "uint256",
             "internalType": "uint256"
           },
           {
-            "name": "dependentPostId",
+            "name": "toPostId",
             "type": "uint256",
             "internalType": "uint256"
           },
@@ -481,22 +481,33 @@ export const PostRegistryABI = [
   },
   {
     "type": "error",
-    "name": "DependentMustBeClaim",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "DependentPostDoesNotExist",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "DuplicateClaim",
     "inputs": [
       {
         "name": "existingPostId",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "DuplicateLink",
+    "inputs": [
+      {
+        "name": "fromPostId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "toPostId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "isChallenge",
+        "type": "bool",
+        "internalType": "bool"
       }
     ]
   },
@@ -528,12 +539,12 @@ export const PostRegistryABI = [
   },
   {
     "type": "error",
-    "name": "IndependentMustBeClaim",
+    "name": "FromPostDoesNotExist",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "IndependentPostDoesNotExist",
+    "name": "FromPostMustBeClaim",
     "inputs": []
   },
   {
@@ -569,6 +580,16 @@ export const PostRegistryABI = [
   {
     "type": "error",
     "name": "NotInitializing",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ToPostDoesNotExist",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ToPostMustBeClaim",
     "inputs": []
   },
   {
@@ -1490,6 +1511,35 @@ export const LinkGraphABI = [
   },
   {
     "type": "function",
+    "name": "hasEdge",
+    "inputs": [
+      {
+        "name": "fromClaimPostId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "toClaimPostId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "isChallenge",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "initialize",
     "inputs": [
       {
@@ -1686,8 +1736,24 @@ export const LinkGraphABI = [
   },
   {
     "type": "error",
-    "name": "CycleDetected",
-    "inputs": []
+    "name": "DuplicateEdge",
+    "inputs": [
+      {
+        "name": "fromClaimPostId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "toClaimPostId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "isChallenge",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ]
   },
   {
     "type": "error",
@@ -1738,11 +1804,6 @@ export const LinkGraphABI = [
   {
     "type": "error",
     "name": "SelfLoop",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "TraversalLimitExceeded",
     "inputs": []
   },
   {
