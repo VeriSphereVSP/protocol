@@ -1,20 +1,18 @@
 // protocol/src/hooks/useCreateClaim.ts
-// Create a claim on-chain via the relay.
-// - Allowance & balance checks: via app API
-// - VSP approve: DIRECT wallet tx (ERC-20 requires msg.sender = user)
-// - createClaim: via relay meta-tx
-
-import { useState, useCallback, useEffect } from "react";
-import { useAccount, useWalletClient, usePublicClient } from "wagmi";
+import { useState, useCallback } from "react";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { encodeFunctionData, type Address } from "viem";
-import { FUJI_ADDRESSES } from "../addresses/index.js";
-import { PostRegistryABI, VSPTokenABI } from "../abis.js";
 import { useMetaTx } from "./useMetaTx.js";
-import { fetchAllowance, fetchBalance } from "./relay.js";
-import type { ClaimState } from "./types.js";
+import { signPermit, fetchAllowance, fetchBalance, checkClaimOnChain } from "./relay.js";
+import { PostRegistryABI } from "../abis.js";
+import { FUJI_ADDRESSES } from "../addresses/index.js";
+import type { RelayResponse, ClaimState } from "./types.js";
+
+const API_BASE =
+  (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE) || "/api";
 
 const POSTING_FEE = BigInt("1000000000000000000"); // 1 VSP
-const MAX_APPROVAL = BigInt("1000000000000000000000"); // 1000 VSP
+const PERMIT_VALUE = BigInt("10000000000000000000"); // 10 VSP buffer
 
 function errorToString(err: any): string {
   if (typeof err === "string") return err;
@@ -23,114 +21,85 @@ function errorToString(err: any): string {
   try { return JSON.stringify(err); } catch { return "Unknown error"; }
 }
 
-export function useCreateClaim(apiBase: string = "/api") {
-  const { address: userAddress } = useAccount();
+export function useCreateClaim() {
+  const { address: userAddress, chain } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
-  const { sendMetaTx } = useMetaTx(apiBase);
+  const { sendMetaTx } = useMetaTx();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [claimState, setClaimState] = useState<ClaimState | null>(null);
-  const [needsApproval, setNeedsApproval] = useState(false);
 
-  // Check allowance via backend API
-  const checkAllowance = useCallback(async () => {
-    if (!userAddress) return;
-    try {
-      const allowance = await fetchAllowance(
-        apiBase, userAddress, FUJI_ADDRESSES.PostRegistry,
+  const getPermitIfNeeded = useCallback(
+    async () => {
+      if (!userAddress || !publicClient || !walletClient || !chain) return undefined;
+      const currentAllowance = await fetchAllowance(
+        API_BASE, userAddress, FUJI_ADDRESSES.PostRegistry,
       );
-      setNeedsApproval(allowance < POSTING_FEE);
-    } catch {
-      setNeedsApproval(false);
-    }
-  }, [userAddress, apiBase]);
-
-  useEffect(() => { checkAllowance(); }, [checkAllowance]);
-
-  // Approve via DIRECT wallet tx (ERC-20 approve requires msg.sender = user)
-  const approveVSP = useCallback(async () => {
-    if (!userAddress || !walletClient || !publicClient) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const hash = await walletClient.writeContract({
-        address: FUJI_ADDRESSES.VSPToken as Address,
-        abi: VSPTokenABI,
-        functionName: "approve",
-        args: [FUJI_ADDRESSES.PostRegistry as Address, MAX_APPROVAL],
+      if (currentAllowance >= POSTING_FEE) return undefined;
+      return signPermit({
+        walletClient, publicClient,
+        tokenAddress: FUJI_ADDRESSES.VSPToken as Address,
+        tokenName: "VeriSphere", tokenVersion: "1",
+        spender: FUJI_ADDRESSES.PostRegistry as Address,
+        value: PERMIT_VALUE, chainId: chain.id,
       });
-      await publicClient.waitForTransactionReceipt({ hash });
-      setNeedsApproval(false);
-    } catch (err: any) {
-      setError(errorToString(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [userAddress, walletClient, publicClient]);
+    },
+    [userAddress, publicClient, walletClient, chain],
+  );
 
-  // Create claim via relay meta-tx
   const createClaim = useCallback(
     async (text: string): Promise<ClaimState | null> => {
-      if (!userAddress) {
-        setError("Wallet not connected");
-        return null;
-      }
-      setLoading(true);
-      setError(null);
-      setTxHash(null);
-      setClaimState(null);
+      if (!userAddress) { setError("Wallet not connected"); return null; }
+      setLoading(true); setError(null); setTxHash(null); setClaimState(null);
       try {
-        // Pre-flight: check allowance via backend
-        const allowance = await fetchAllowance(
-          apiBase, userAddress, FUJI_ADDRESSES.PostRegistry,
-        );
-        if (allowance < POSTING_FEE) {
-          setNeedsApproval(true);
-          setError("Please approve VSP first");
-          return null;
-        }
-
-        // Pre-flight: check balance via backend
-        const balance = await fetchBalance(apiBase, userAddress);
+        // Check balance
+        const balance = await fetchBalance(API_BASE, userAddress);
         if (balance < POSTING_FEE) {
           setError("Insufficient VSP balance (need 1 VSP to create a claim)");
           return null;
         }
 
+        // Check if already on-chain
+        const existing = await checkClaimOnChain(API_BASE, text);
+        if (existing.exists && existing.post_id != null) {
+          const state: ClaimState = {
+            post_id: existing.post_id, text, creator: userAddress,
+            support_total: 0, challenge_total: 0,
+          };
+          setClaimState(state);
+          return state;
+        }
+
+        // Get permit if needed
+        const permit = await getPermitIfNeeded();
+
+        // Encode createClaim calldata
         const calldata = encodeFunctionData({
           abi: PostRegistryABI,
           functionName: "createClaim",
           args: [text],
         });
 
-        const result = await sendMetaTx(
-          FUJI_ADDRESSES.PostRegistry as Address,
-          calldata,
-          { gasLimit: 600_000 },
+        const result: RelayResponse = await sendMetaTx(
+          FUJI_ADDRESSES.PostRegistry as Address, calldata,
+          { gasLimit: 800_000, permit },
         );
 
         setTxHash(result.tx_hash);
-        if (result.claim) {
-          setClaimState(result.claim);
-          return result.claim;
-        }
+        if (result.claim) { setClaimState(result.claim); return result.claim; }
         return null;
       } catch (err: any) {
         setError(errorToString(err));
         console.error("createClaim error:", err);
         return null;
-      } finally {
-        setLoading(false);
-      }
+      } finally { setLoading(false); }
     },
-    [userAddress, sendMetaTx, apiBase],
+    [userAddress, sendMetaTx, getPermitIfNeeded],
   );
 
-  return {
-    createClaim, approveVSP, loading, error,
-    txHash, claimState, needsApproval,
-  };
+  return { createClaim, loading, error, txHash, claimState,
+    needsApproval: false, approveVSP: async () => {} };
 }

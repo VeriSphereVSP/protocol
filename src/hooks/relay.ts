@@ -1,12 +1,13 @@
 // protocol/src/hooks/relay.ts
-// Pure HTTP relay client. All chain interaction goes through the app backend.
-// The only client-side crypto operation is EIP-712 signing via the wallet.
+// Pure HTTP relay client + EIP-2612 permit signing.
+// All chain interaction goes through the app backend.
+// Client-side crypto: EIP-712 signing via the wallet.
 
-import type { RelayResponse } from "./types.js";
+import type { RelayResponse, PermitData } from "./types.js";
+import type { WalletClient, PublicClient, Address } from "viem";
 
 /**
  * Fetch the current forwarder nonce for an address.
- * This calls the app backend, which reads from the Forwarder contract.
  */
 export async function fetchNonce(
   apiBase: string,
@@ -19,27 +20,118 @@ export async function fetchNonce(
 
 /**
  * Submit a signed meta-transaction to the relay.
- * The relay submits it on-chain and returns the result.
+ * If permit is provided, the relay executes token.permit() first (relay pays gas).
  */
 export async function submitRelay(
   apiBase: string,
   request: Record<string, unknown>,
   signature: string,
+  permit?: PermitData,
 ): Promise<RelayResponse> {
+  const body: Record<string, unknown> = { request, signature };
+  if (permit) {
+    body.permit = permit;
+  }
   const res = await fetch(`${apiBase}/relay`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ request, signature }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(extractErrorMessage(body));
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(extractErrorMessage(errBody));
   }
   return await res.json();
 }
 
 /**
- * Check VSP allowance via the backend (no direct chain read).
+ * Sign an EIP-2612 permit for a token.
+ * Pure client-side operation — no network calls except reading the nonce.
+ */
+export async function signPermit({
+  walletClient,
+  publicClient,
+  tokenAddress,
+  tokenName,
+  tokenVersion,
+  spender,
+  value,
+  chainId,
+}: {
+  walletClient: WalletClient;
+  publicClient: PublicClient;
+  tokenAddress: Address;
+  tokenName: string;
+  tokenVersion: string;
+  spender: Address;
+  value: bigint;
+  chainId: number;
+}): Promise<PermitData> {
+  const owner = walletClient.account!.address;
+
+  // Read current permit nonce from chain
+  const nonce = await publicClient.readContract({
+    address: tokenAddress,
+    abi: [
+      {
+        inputs: [{ name: "owner", type: "address" }],
+        name: "nonces",
+        outputs: [{ name: "", type: "uint256" }],
+        stateMutability: "view",
+        type: "function",
+      },
+    ] as const,
+    functionName: "nonces",
+    args: [owner],
+  });
+
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 hour
+
+  const signature = await walletClient.signTypedData({
+      account: walletClient.account!,
+    domain: {
+      name: tokenName,
+      version: tokenVersion,
+      chainId,
+      verifyingContract: tokenAddress,
+    },
+    types: {
+      Permit: [
+        { name: "owner", type: "address" },
+        { name: "spender", type: "address" },
+        { name: "value", type: "uint256" },
+        { name: "nonce", type: "uint256" },
+        { name: "deadline", type: "uint256" },
+      ],
+    },
+    primaryType: "Permit",
+    message: {
+      owner,
+      spender,
+      value,
+      nonce: nonce as bigint,
+      deadline,
+    },
+  });
+
+  const r = "0x" + signature.slice(2, 66);
+  const s = "0x" + signature.slice(66, 130);
+  const v = parseInt(signature.slice(130, 132), 16);
+
+  return {
+    token: tokenAddress,
+    owner,
+    spender,
+    value: value.toString(),
+    deadline: Number(deadline),
+    v,
+    r,
+    s,
+  };
+}
+
+/**
+ * Check VSP allowance via the backend.
  */
 export async function fetchAllowance(
   apiBase: string,
@@ -55,7 +147,7 @@ export async function fetchAllowance(
 }
 
 /**
- * Check VSP balance via the backend (no direct chain read).
+ * Check VSP balance via the backend.
  */
 export async function fetchBalance(
   apiBase: string,
@@ -69,7 +161,6 @@ export async function fetchBalance(
 
 /**
  * Check if a claim already exists on-chain.
- * Returns { exists: true, post_id: N } or { exists: false }.
  */
 export async function checkClaimOnChain(
   apiBase: string,

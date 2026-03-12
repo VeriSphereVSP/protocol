@@ -6,7 +6,10 @@ import { useWalletClient } from "wagmi";
 import type { Hex, Address } from "viem";
 import { FUJI_ADDRESSES } from "../addresses/index.js";
 import { fetchNonce, submitRelay } from "./relay.js";
-import type { RelayResponse } from "./types.js";
+import type { RelayResponse, PermitData } from "./types.js";
+
+const API_BASE =
+  (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE) || "/api";
 
 const FORWARDER_DOMAIN = {
   name: "VerisphereForwarder",
@@ -27,35 +30,33 @@ const FORWARD_REQUEST_TYPES = {
   ],
 } as const;
 
-export function useMetaTx(apiBase: string = "/api") {
+export { type RelayResponse };
+
+export function useMetaTx() {
   const { data: walletClient } = useWalletClient();
 
   const sendMetaTx = useCallback(
     async (
       targetContract: Address,
       calldata: Hex,
-      options?: { gasLimit?: number; value?: number },
+      options?: { gasLimit?: number; value?: number; permit?: PermitData },
     ): Promise<RelayResponse> => {
       if (!walletClient) throw new Error("Wallet not connected");
 
       const userAddress = walletClient.account.address;
-      const nonce = await fetchNonce(apiBase, userAddress);
+      const nonce = await fetchNonce(API_BASE, userAddress);
       const deadline = Math.floor(Date.now() / 1000) + 300;
-      const value = options?.value ?? 0;
-      const gas = options?.gasLimit ?? 500_000;
 
-      // BigInt version for EIP-712 signing (viem requires bigint for uint256)
       const forwardRequest = {
         from: userAddress,
         to: targetContract,
-        value: BigInt(value),
-        gas: BigInt(gas),
+        value: BigInt(options?.value ?? 0),
+        gas: BigInt(options?.gasLimit ?? 500_000),
         nonce: BigInt(nonce),
         deadline,
         data: calldata,
       };
 
-      // Only client-side crypto: sign the EIP-712 typed data
       const signature = await walletClient.signTypedData({
         domain: FORWARDER_DOMAIN,
         types: FORWARD_REQUEST_TYPES,
@@ -63,20 +64,16 @@ export function useMetaTx(apiBase: string = "/api") {
         message: forwardRequest,
       });
 
-      // Number version for JSON serialization (BigInt can't be stringified)
+      // Convert bigints to numbers for JSON serialization
       const relayRequest = {
-        from: userAddress,
-        to: targetContract,
-        value,
-        gas,
-        nonce,
-        deadline,
-        data: calldata,
+        ...forwardRequest,
+        value: Number(forwardRequest.value),
+        gas: Number(forwardRequest.gas),
+        nonce: Number(forwardRequest.nonce),
       };
-
-      return submitRelay(apiBase, relayRequest, signature);
+      return submitRelay(API_BASE, relayRequest, signature, options?.permit);
     },
-    [walletClient, apiBase],
+    [walletClient],
   );
 
   return { sendMetaTx };

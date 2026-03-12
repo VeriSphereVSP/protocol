@@ -1,18 +1,15 @@
 // protocol/src/hooks/useStake.ts
-// Stake and withdraw VSP on claims via the relay.
-// Approve is a direct wallet tx; stake/withdraw go through the relay.
-
-import { useState, useCallback, useEffect } from "react";
-import { useAccount, useWalletClient, usePublicClient } from "wagmi";
+import { useState, useCallback } from "react";
+import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { encodeFunctionData, parseUnits, type Address } from "viem";
-import { FUJI_ADDRESSES } from "../addresses/index.js";
-import { StakeEngineABI, VSPTokenABI } from "../abis.js";
 import { useMetaTx } from "./useMetaTx.js";
-import { fetchAllowance } from "./relay.js";
+import { signPermit, fetchAllowance } from "./relay.js";
+import { StakeEngineABI, VSPTokenABI } from "../abis.js";
+import { FUJI_ADDRESSES } from "../addresses/index.js";
 import type { ClaimState } from "./types.js";
 
-const MAX_APPROVAL = BigInt("1000000000000000000000"); // 1000 VSP
-const MIN_ALLOWANCE = BigInt("1000000000000000000"); // 1 VSP
+const API_BASE =
+  (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE) || "/api";
 
 function errorToString(err: any): string {
   if (typeof err === "string") return err;
@@ -21,72 +18,33 @@ function errorToString(err: any): string {
   try { return JSON.stringify(err); } catch { return "Unknown error"; }
 }
 
-export function useStake(apiBase: string = "/api") {
-  const { address: userAddress } = useAccount();
+export function useStake() {
+  const { address: userAddress, chain } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
-  const { sendMetaTx } = useMetaTx(apiBase);
+  const { sendMetaTx } = useMetaTx();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [claimState, setClaimState] = useState<ClaimState | null>(null);
-  const [needsApproval, setNeedsApproval] = useState(false);
 
-  const checkAllowance = useCallback(async () => {
-    if (!userAddress) return;
-    try {
-      const allowance = await fetchAllowance(
-        apiBase, userAddress, FUJI_ADDRESSES.StakeEngine,
-      );
-      setNeedsApproval(allowance < MIN_ALLOWANCE);
-    } catch {
-      setNeedsApproval(false);
-    }
-  }, [userAddress, apiBase]);
-
-  useEffect(() => { checkAllowance(); }, [checkAllowance]);
-
-  // Approve via DIRECT wallet tx
-  const approveVSP = useCallback(async () => {
-    if (!userAddress || !walletClient || !publicClient) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const hash = await walletClient.writeContract({
-        address: FUJI_ADDRESSES.VSPToken as Address,
-        abi: VSPTokenABI,
-        functionName: "approve",
-        args: [FUJI_ADDRESSES.StakeEngine as Address, MAX_APPROVAL],
-      });
-      await publicClient.waitForTransactionReceipt({ hash });
-      setNeedsApproval(false);
-    } catch (err: any) {
-      setError(errorToString(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [userAddress, walletClient, publicClient]);
-
-  // Ensure sufficient allowance, approve if needed
-  const ensureAllowance = useCallback(
+  const getPermitIfNeeded = useCallback(
     async (amountWei: bigint) => {
-      if (!userAddress || !walletClient || !publicClient) return;
-      const allowance = await fetchAllowance(
-        apiBase, userAddress, FUJI_ADDRESSES.StakeEngine,
+      if (!userAddress || !publicClient || !walletClient || !chain) return undefined;
+      const currentAllowance = await fetchAllowance(
+        API_BASE, userAddress, FUJI_ADDRESSES.StakeEngine,
       );
-      if (allowance < amountWei) {
-        const hash = await walletClient.writeContract({
-          address: FUJI_ADDRESSES.VSPToken as Address,
-          abi: VSPTokenABI,
-          functionName: "approve",
-          args: [FUJI_ADDRESSES.StakeEngine as Address, MAX_APPROVAL],
-        });
-        await publicClient.waitForTransactionReceipt({ hash });
-        setNeedsApproval(false);
-      }
+      if (currentAllowance >= amountWei) return undefined;
+      return signPermit({
+        walletClient, publicClient,
+        tokenAddress: FUJI_ADDRESSES.VSPToken as Address,
+        tokenName: "VeriSphere", tokenVersion: "1",
+        spender: FUJI_ADDRESSES.StakeEngine as Address,
+        value: amountWei * 2n, chainId: chain.id,
+      });
     },
-    [userAddress, walletClient, publicClient, apiBase],
+    [userAddress, publicClient, walletClient, chain],
   );
 
   const stake = useCallback(
@@ -96,13 +54,14 @@ export function useStake(apiBase: string = "/api") {
       try {
         const amountWei = parseUnits(amount.toString(), 18);
         if (amountWei <= 0n) { setError("Amount must be greater than 0"); return null; }
-        await ensureAllowance(amountWei);
+        const permit = await getPermitIfNeeded(amountWei);
         const calldata = encodeFunctionData({
           abi: StakeEngineABI, functionName: "stake",
           args: [BigInt(postId), side === "support" ? 0 : 1, amountWei],
         });
         const result = await sendMetaTx(
-          FUJI_ADDRESSES.StakeEngine as Address, calldata, { gasLimit: 600_000 },
+          FUJI_ADDRESSES.StakeEngine as Address, calldata,
+          { gasLimit: 600_000, permit },
         );
         setTxHash(result.tx_hash);
         if (result.claim) { setClaimState(result.claim); return result.claim; }
@@ -113,7 +72,7 @@ export function useStake(apiBase: string = "/api") {
         return null;
       } finally { setLoading(false); }
     },
-    [userAddress, sendMetaTx, ensureAllowance],
+    [userAddress, sendMetaTx, getPermitIfNeeded],
   );
 
   const withdraw = useCallback(
@@ -128,7 +87,8 @@ export function useStake(apiBase: string = "/api") {
           args: [BigInt(postId), side === "support" ? 0 : 1, amountWei, lifo],
         });
         const result = await sendMetaTx(
-          FUJI_ADDRESSES.StakeEngine as Address, calldata, { gasLimit: 500_000 },
+          FUJI_ADDRESSES.StakeEngine as Address, calldata,
+          { gasLimit: 500_000 },
         );
         setTxHash(result.tx_hash);
         if (result.claim) { setClaimState(result.claim); return result.claim; }
@@ -142,8 +102,6 @@ export function useStake(apiBase: string = "/api") {
     [userAddress, sendMetaTx],
   );
 
-  return {
-    stake, withdraw, loading, error,
-    txHash, claimState, needsApproval, approveVSP,
-  };
+  return { stake, withdraw, loading, error, txHash, claimState,
+    needsApproval: false, approveVSP: async () => {} };
 }
