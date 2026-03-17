@@ -39,6 +39,7 @@ export function useCreateClaim() {
         API_BASE, userAddress, FUJI_ADDRESSES.PostRegistry,
       );
       if (currentAllowance >= POSTING_FEE) return undefined;
+      window.dispatchEvent(new CustomEvent("verisphere:toast", { detail: { message: "Step 1: Approve token access (sign in wallet)", type: "info" } }));
       return signPermit({
         walletClient, publicClient,
         tokenAddress: FUJI_ADDRESSES.VSPToken as Address,

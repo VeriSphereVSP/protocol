@@ -57,6 +57,7 @@ export function useMetaTx() {
         data: calldata,
       };
 
+      window.dispatchEvent(new CustomEvent("verisphere:toast", { detail: { message: "Confirm transaction in wallet", type: "info" } }));
       const signature = await walletClient.signTypedData({
         domain: FORWARDER_DOMAIN,
         types: FORWARD_REQUEST_TYPES,
