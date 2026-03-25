@@ -27,10 +27,14 @@ export async function submitRelay(
   request: Record<string, unknown>,
   signature: string,
   permit?: PermitData,
+  feePermit?: PermitData,
 ): Promise<RelayResponse> {
   const body: Record<string, unknown> = { request, signature };
   if (permit) {
     body.permit = permit;
+  }
+  if (feePermit) {
+    body.fee_permit = feePermit;
   }
   const res = await fetch(`${apiBase}/relay`, {
     method: "POST",

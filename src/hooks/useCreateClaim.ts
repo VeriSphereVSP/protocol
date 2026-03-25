@@ -86,7 +86,7 @@ export function useCreateClaim() {
 
         const result: RelayResponse = await sendMetaTx(
           FUJI_ADDRESSES.PostRegistry as Address, calldata,
-          { gasLimit: 800_000, permit },
+          { gasLimit: 2_000_000, permit },
         );
 
         setTxHash(result.tx_hash);
