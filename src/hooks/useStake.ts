@@ -5,7 +5,7 @@ import { encodeFunctionData, parseUnits, type Address } from "viem";
 import { useMetaTx } from "./useMetaTx.js";
 import { signPermit, fetchAllowance } from "./relay.js";
 import { StakeEngineABI, VSPTokenABI } from "../abis.js";
-import { FUJI_ADDRESSES } from "../addresses/index.js";
+import { getAddresses } from "../addresses/index.js";
 import type { ClaimState } from "./types.js";
 
 const API_BASE =
@@ -32,16 +32,17 @@ export function useStake() {
   const getPermitIfNeeded = useCallback(
     async (amountWei: bigint) => {
       if (!userAddress || !publicClient || !walletClient || !chain) return undefined;
+      const addresses = getAddresses(chain.id);
       const currentAllowance = await fetchAllowance(
-        API_BASE, userAddress, FUJI_ADDRESSES.StakeEngine,
+        API_BASE, userAddress, addresses.StakeEngine,
       );
       if (currentAllowance >= amountWei) return undefined;
       window.dispatchEvent(new CustomEvent("verisphere:toast", { detail: { message: "Step 1: Approve token access (sign in wallet)", type: "info" } }));
       return signPermit({
         walletClient, publicClient,
-        tokenAddress: FUJI_ADDRESSES.VSPToken as Address,
+        tokenAddress: addresses.VSPToken as Address,
         tokenName: "VeriSphere", tokenVersion: "1",
-        spender: FUJI_ADDRESSES.StakeEngine as Address,
+        spender: addresses.StakeEngine as Address,
         value: amountWei * 2n, chainId: chain.id,
       });
     },
@@ -53,6 +54,7 @@ export function useStake() {
       if (!userAddress) { setError("Wallet not connected"); return null; }
       setLoading(true); setError(null); setTxHash(null); setClaimState(null);
       try {
+        const addresses = getAddresses(chain?.id ?? 43113);
         const amountWei = parseUnits(amount.toString(), 18);
         if (amountWei <= 0n) { setError("Amount must be greater than 0"); return null; }
         const permit = await getPermitIfNeeded(amountWei);
@@ -61,7 +63,7 @@ export function useStake() {
           args: [BigInt(postId), side === "support" ? 0 : 1, amountWei],
         });
         const result = await sendMetaTx(
-          FUJI_ADDRESSES.StakeEngine as Address, calldata,
+          addresses.StakeEngine as Address, calldata,
           { gasLimit: 600_000, permit },
         );
         setTxHash(result.tx_hash);
@@ -81,6 +83,7 @@ export function useStake() {
       if (!userAddress) { setError("Wallet not connected"); return null; }
       setLoading(true); setError(null); setTxHash(null); setClaimState(null);
       try {
+        const addresses = getAddresses(chain?.id ?? 43113);
         const amountWei = parseUnits(amount.toString(), 18);
         if (amountWei <= 0n) { setError("Amount must be greater than 0"); return null; }
         const calldata = encodeFunctionData({
@@ -88,7 +91,7 @@ export function useStake() {
           args: [BigInt(postId), side === "support" ? 0 : 1, amountWei, lifo],
         });
         const result = await sendMetaTx(
-          FUJI_ADDRESSES.StakeEngine as Address, calldata,
+          addresses.StakeEngine as Address, calldata,
           { gasLimit: 500_000 },
         );
         setTxHash(result.tx_hash);

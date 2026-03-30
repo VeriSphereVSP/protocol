@@ -13,8 +13,8 @@ export type Post = {
 };
 
 export type Link = {
-  independentPostId: bigint;
-  dependentPostId: bigint;
+  fromPostId: bigint;
+  toPostId: bigint;
   isChallenge: boolean;
 };
 

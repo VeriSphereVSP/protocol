@@ -1,7 +1,7 @@
 {
   "name": "@verisphere/protocol",
   "version": "0.2.0",
-  "description": "VeriSphere Protocol SDK — ABIs, addresses, types, and React hooks",
+  "description": "VeriSphere Protocol SDK \u2014 ABIs, addresses, types, and React hooks",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -34,7 +34,7 @@
     "url": "https://github.com/yourusername/verisphere"
   },
   "dependencies": {
-    "ethers": "^6.13.0"
+    "viem": "^2.0.0"
   },
   "peerDependencies": {
     "react": "^18.0.0",

@@ -4,7 +4,7 @@
 import { useCallback } from "react";
 import { useWalletClient, usePublicClient, useAccount } from "wagmi";
 import type { Hex, Address } from "viem";
-import { FUJI_ADDRESSES } from "../addresses/index.js";
+import { getAddresses } from "../addresses/index.js";
 import { VSPTokenABI } from "../abis.js";
 import { fetchNonce, submitRelay, signPermit } from "./relay.js";
 import type { RelayResponse, PermitData } from "./types.js";
@@ -12,12 +12,7 @@ import type { RelayResponse, PermitData } from "./types.js";
 const API_BASE =
   (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE) || "/api";
 
-const FORWARDER_DOMAIN = {
-  name: "VerisphereForwarder",
-  version: "1",
-  chainId: 43113,
-  verifyingContract: FUJI_ADDRESSES.Forwarder as Address,
-} as const;
+// Domain is built dynamically in sendMetaTx using chain.id
 
 const FORWARD_REQUEST_TYPES = {
   ForwardRequest: [
@@ -48,6 +43,7 @@ export function useMetaTx() {
         throw new Error("Wallet not connected");
 
       const userAddress = walletClient.account.address;
+      const addresses = getAddresses(chain.id);
       const nonce = await fetchNonce(API_BASE, userAddress);
       const deadline = Math.floor(Date.now() / 1000) + 300;
 
@@ -65,14 +61,14 @@ export function useMetaTx() {
       // This is a small permit (e.g. 0.1 VSP) granting the forwarder
       // the ability to collect the relay fee via transferFrom.
       let feePermit: PermitData | undefined;
-      if (FUJI_ADDRESSES.Forwarder) {
+      if (addresses.Forwarder) {
         try {
           // Check current allowance to forwarder
           const currentAllowance = await publicClient.readContract({
-            address: FUJI_ADDRESSES.VSPToken as Address,
+            address: addresses.VSPToken as Address,
             abi: VSPTokenABI,
             functionName: "allowance",
-            args: [userAddress, FUJI_ADDRESSES.Forwarder as Address],
+            args: [userAddress, addresses.Forwarder as Address],
           }) as bigint;
 
           // If allowance is low, sign a permit for a generous buffer
@@ -81,10 +77,10 @@ export function useMetaTx() {
             feePermit = await signPermit({
               walletClient,
               publicClient,
-              tokenAddress: FUJI_ADDRESSES.VSPToken as Address,
+              tokenAddress: addresses.VSPToken as Address,
               tokenName: "VeriSphere",
               tokenVersion: "1",
-              spender: FUJI_ADDRESSES.Forwarder as Address,
+              spender: addresses.Forwarder as Address,
               value: FEE_PERMIT_VALUE,
               chainId: chain.id,
             });
@@ -95,9 +91,15 @@ export function useMetaTx() {
         }
       }
 
+
       window.dispatchEvent(new CustomEvent("verisphere:toast", { detail: { message: "Confirm transaction in wallet", type: "info" } }));
       const signature = await walletClient.signTypedData({
-        domain: FORWARDER_DOMAIN,
+        domain: {
+          name: "VerisphereForwarder",
+          version: "1",
+          chainId: chain.id,
+          verifyingContract: addresses.Forwarder as Address,
+        },
         types: FORWARD_REQUEST_TYPES,
         primaryType: "ForwardRequest",
         message: forwardRequest,

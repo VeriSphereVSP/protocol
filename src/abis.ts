@@ -749,6 +749,24 @@ export const StakeEngineABI = [
   },
   {
     "type": "function",
+    "name": "compactLots",
+    "inputs": [
+      {
+        "name": "postId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "side",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "getPostTotals",
     "inputs": [
       {
@@ -1174,6 +1192,31 @@ export const StakeEngineABI = [
   },
   {
     "type": "event",
+    "name": "LotsCompacted",
+    "inputs": [
+      {
+        "name": "postId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "side",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "removed",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "NumTranchesSet",
     "inputs": [
       {
@@ -1377,6 +1420,11 @@ export const StakeEngineABI = [
   {
     "type": "error",
     "name": "InvalidTranches",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoGhostLots",
     "inputs": []
   },
   {

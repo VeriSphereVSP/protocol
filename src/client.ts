@@ -1,139 +1,148 @@
 // protocol/src/client.ts
-import { Contract, JsonRpcProvider, Wallet } from "ethers";
+// Server-side protocol client using viem.
+// Used by the app backend for direct chain reads and writes.
+
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  type PublicClient,
+  type WalletClient,
+  type Transport,
+  type Chain,
+  type Account,
+  getContract,
+  type GetContractReturnType,
+  type Abi,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { avalancheFuji, avalanche } from "viem/chains";
+
 import {
   PostRegistryABI,
   StakeEngineABI,
   LinkGraphABI,
   ProtocolViewsABI,
 } from "./abis.js";
-import type { ContractAddresses } from "./types.js"; // ← only new import
+import type { ContractAddresses } from "./types.js";
 
 export type { ContractAddresses };
 
+const CHAINS: Record<number, Chain> = {
+  43113: avalancheFuji,
+  43114: avalanche,
+};
+
 export type ProtocolClientOpts = {
   rpcUrl: string;
-  privateKey?: string;
-  addresses: ContractAddresses; // ← was `Addresses` (local type), now uses shared type
+  privateKey?: `0x${string}`;
+  addresses: ContractAddresses;
+  chainId?: number;
 };
 
 export class ProtocolClient {
-  readonly provider: JsonRpcProvider;
-  readonly signer?: Wallet;
-
-  readonly postRegistry: Contract;
-  readonly stakeEngine: Contract;
-  readonly linkGraph: Contract;
-  readonly protocolViews?: Contract;
+  readonly publicClient: PublicClient;
+  readonly walletClient?: WalletClient;
+  readonly addresses: ContractAddresses;
 
   constructor(opts: ProtocolClientOpts) {
-    this.provider = new JsonRpcProvider(opts.rpcUrl);
+    const chain = CHAINS[opts.chainId ?? 43113] ?? avalancheFuji;
+
+    this.publicClient = createPublicClient({
+      chain,
+      transport: http(opts.rpcUrl),
+    });
 
     if (opts.privateKey) {
-      this.signer = new Wallet(opts.privateKey, this.provider);
+      const account = privateKeyToAccount(opts.privateKey);
+      this.walletClient = createWalletClient({
+        chain,
+        transport: http(opts.rpcUrl),
+        account,
+      });
     }
 
-    const runner = this.signer ?? this.provider;
-
-    // Field names match ContractAddresses keys
-    this.postRegistry = new Contract(
-      opts.addresses.PostRegistry,
-      PostRegistryABI,
-      runner,
-    );
-    this.stakeEngine = new Contract(
-      opts.addresses.StakeEngine,
-      StakeEngineABI,
-      runner,
-    );
-    this.linkGraph = new Contract(
-      opts.addresses.LinkGraph,
-      LinkGraphABI,
-      runner,
-    );
-
-    if (opts.addresses.ProtocolViews) {
-      this.protocolViews = new Contract(
-        opts.addresses.ProtocolViews,
-        ProtocolViewsABI,
-        runner,
-      );
-    }
+    this.addresses = opts.addresses;
   }
 
-  // ─── Sponsored writes (require privateKey) ───────────────────────────────
+  // ─── Reads ──────────────────────────────────────────────────
+
+  async getPost(postId: bigint) {
+    return this.publicClient.readContract({
+      address: this.addresses.PostRegistry,
+      abi: PostRegistryABI,
+      functionName: "getPost",
+      args: [postId],
+    });
+  }
+
+  async getClaim(claimId: bigint): Promise<string> {
+    return this.publicClient.readContract({
+      address: this.addresses.PostRegistry,
+      abi: PostRegistryABI,
+      functionName: "getClaim",
+      args: [claimId],
+    }) as Promise<string>;
+  }
+
+  async getNextPostId(): Promise<bigint> {
+    return this.publicClient.readContract({
+      address: this.addresses.PostRegistry,
+      abi: PostRegistryABI,
+      functionName: "nextPostId",
+    }) as Promise<bigint>;
+  }
+
+  // ─── Writes (require privateKey) ────────────────────────────
 
   async createClaim(
     content: string,
   ): Promise<{ txHash: string; postId?: bigint }> {
-    if (!this.signer) throw new Error("createClaim requires privateKey");
+    if (!this.walletClient) throw new Error("createClaim requires privateKey");
 
-    const tx = await this.postRegistry.createClaim(content);
-    const receipt = await tx.wait();
+    const hash = await this.walletClient.writeContract({
+      chain: null,
+      account: null,
+      address: this.addresses.PostRegistry,
+      abi: PostRegistryABI,
+      functionName: "createClaim",
+      args: [content],
+    });
 
-    const event = receipt.logs
-      .map((l: any) => {
+    const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
+
+    // Parse PostCreated event
+    const postId = receipt.logs
+      .map((log) => {
         try {
-          return this.postRegistry.interface.parseLog(l);
+          // PostCreated event topic
+          return log.topics[1] ? BigInt(log.topics[1]) : undefined;
         } catch {
-          return null;
+          return undefined;
         }
       })
-      .find((e: any) => e?.name === "PostCreated");
+      .find((id) => id !== undefined);
 
-    return { txHash: tx.hash, postId: event?.args?.postId };
-  }
-
-  async createLink(
-    independentPostId: bigint,
-    dependentPostId: bigint,
-    isChallenge: boolean,
-  ): Promise<{ txHash: string; postId?: bigint }> {
-    if (!this.signer) throw new Error("createLink requires privateKey");
-
-    const tx = await this.postRegistry.createLink(
-      independentPostId,
-      dependentPostId,
-      isChallenge,
-    );
-    const receipt = await tx.wait();
-
-    const event = receipt.logs
-      .map((l: any) => {
-        try {
-          return this.postRegistry.interface.parseLog(l);
-        } catch {
-          return null;
-        }
-      })
-      .find((e: any) => e?.name === "PostCreated");
-
-    return { txHash: tx.hash, postId: event?.args?.postId };
+    return { txHash: hash, postId };
   }
 
   async stake(
     postId: bigint,
-    side: 0 | 1, // 0 = support, 1 = challenge
-    amount: bigint, // in wei (18 decimals)
+    side: 0 | 1,
+    amount: bigint,
   ): Promise<{ txHash: string }> {
-    if (!this.signer) throw new Error("stake requires privateKey");
+    if (!this.walletClient) throw new Error("stake requires privateKey");
 
-    const tx = await this.stakeEngine.stake(postId, side, amount);
-    await tx.wait();
+    const hash = await this.walletClient.writeContract({
+      chain: null,
+      account: null,
+      address: this.addresses.StakeEngine,
+      abi: StakeEngineABI,
+      functionName: "stake",
+      args: [postId, side, amount],
+    });
 
-    return { txHash: tx.hash };
-  }
-
-  // ─── Read methods ─────────────────────────────────────────────────────────
-
-  async getPost(postId: bigint) {
-    return this.postRegistry.getPost(postId);
-  }
-
-  async getClaim(claimId: bigint): Promise<string> {
-    return this.postRegistry.getClaim(claimId);
-  }
-
-  async getNextPostId(): Promise<bigint> {
-    return this.postRegistry.nextPostId();
+    await this.publicClient.waitForTransactionReceipt({ hash });
+    return { txHash: hash };
   }
 }

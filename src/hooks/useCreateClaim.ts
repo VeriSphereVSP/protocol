@@ -5,14 +5,15 @@ import { encodeFunctionData, type Address } from "viem";
 import { useMetaTx } from "./useMetaTx.js";
 import { signPermit, fetchAllowance, fetchBalance, checkClaimOnChain } from "./relay.js";
 import { PostRegistryABI } from "../abis.js";
-import { FUJI_ADDRESSES } from "../addresses/index.js";
+import { getAddresses } from "../addresses/index.js";
 import type { RelayResponse, ClaimState } from "./types.js";
 
 const API_BASE =
   (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE) || "/api";
 
-const POSTING_FEE = BigInt("1000000000000000000"); // 1 VSP
-const PERMIT_VALUE = BigInt("10000000000000000000"); // 10 VSP buffer
+// Posting fee is fetched from backend (governance-configurable)
+const DEFAULT_POSTING_FEE = BigInt("1000000000000000000"); // 1 VSP fallback
+const PERMIT_BUFFER_MULTIPLIER = 10n; // permit for 10x the fee
 
 function errorToString(err: any): string {
   if (typeof err === "string") return err;
@@ -35,17 +36,18 @@ export function useCreateClaim() {
   const getPermitIfNeeded = useCallback(
     async () => {
       if (!userAddress || !publicClient || !walletClient || !chain) return undefined;
+      const addresses = getAddresses(chain.id);
       const currentAllowance = await fetchAllowance(
-        API_BASE, userAddress, FUJI_ADDRESSES.PostRegistry,
+        API_BASE, userAddress, addresses.PostRegistry,
       );
-      if (currentAllowance >= POSTING_FEE) return undefined;
+      if (currentAllowance >= DEFAULT_POSTING_FEE) return undefined;
       window.dispatchEvent(new CustomEvent("verisphere:toast", { detail: { message: "Step 1: Approve token access (sign in wallet)", type: "info" } }));
       return signPermit({
         walletClient, publicClient,
-        tokenAddress: FUJI_ADDRESSES.VSPToken as Address,
+        tokenAddress: addresses.VSPToken as Address,
         tokenName: "VeriSphere", tokenVersion: "1",
-        spender: FUJI_ADDRESSES.PostRegistry as Address,
-        value: PERMIT_VALUE, chainId: chain.id,
+        spender: addresses.PostRegistry as Address,
+        value: DEFAULT_POSTING_FEE * 10n, chainId: chain.id,
       });
     },
     [userAddress, publicClient, walletClient, chain],
@@ -56,9 +58,12 @@ export function useCreateClaim() {
       if (!userAddress) { setError("Wallet not connected"); return null; }
       setLoading(true); setError(null); setTxHash(null); setClaimState(null);
       try {
+        const addresses = getAddresses(chain?.id ?? 43113);
+        const postingFee = DEFAULT_POSTING_FEE; // TODO: fetch from backend when /api/fees returns posting_fee_wei
+
         // Check balance
         const balance = await fetchBalance(API_BASE, userAddress);
-        if (balance < POSTING_FEE) {
+        if (balance < postingFee) {
           setError("Insufficient VSP balance (need 1 VSP to create a claim)");
           return null;
         }
@@ -85,7 +90,7 @@ export function useCreateClaim() {
         });
 
         const result: RelayResponse = await sendMetaTx(
-          FUJI_ADDRESSES.PostRegistry as Address, calldata,
+          addresses.PostRegistry as Address, calldata,
           { gasLimit: 2_000_000, permit },
         );
 

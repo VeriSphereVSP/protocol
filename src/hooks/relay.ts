@@ -177,6 +177,23 @@ export async function checkClaimOnChain(
   return await res.json();
 }
 
+/**
+ * Fetch the current posting fee from the backend.
+ * Returns the fee in wei (e.g. 1000000000000000000 = 1 VSP).
+ */
+export async function fetchPostingFee(
+  apiBase: string,
+): Promise<bigint> {
+  try {
+    const res = await fetch(`${apiBase}/fees`);
+    if (!res.ok) return BigInt("1000000000000000000"); // fallback: 1 VSP
+    const data = await res.json();
+    return BigInt(data.posting_fee_wei ?? "1000000000000000000");
+  } catch {
+    return BigInt("1000000000000000000"); // fallback: 1 VSP
+  }
+}
+
 function extractErrorMessage(err: any): string {
   if (typeof err === "string") return err;
   if (Array.isArray(err))

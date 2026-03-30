@@ -7,5 +7,5 @@ export { useMetaTx } from "./useMetaTx.js";
 export { useCreateClaim } from "./useCreateClaim.js";
 export { useCreateLink } from "./useCreateLink.js";
 export { useStake } from "./useStake.js";
-export { fetchAllowance, fetchBalance, checkClaimOnChain, signPermit } from "./relay.js";
+export { fetchAllowance, fetchBalance, checkClaimOnChain, signPermit, fetchPostingFee } from "./relay.js";
 export type { RelayResponse, ClaimState, WriteHookState, PermitData } from "./types.js";

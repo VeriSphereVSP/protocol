@@ -5,13 +5,13 @@ import { encodeFunctionData, type Address } from "viem";
 import { useMetaTx } from "./useMetaTx.js";
 import { signPermit, fetchAllowance } from "./relay.js";
 import { PostRegistryABI } from "../abis.js";
-import { FUJI_ADDRESSES } from "../addresses/index.js";
+import { getAddresses } from "../addresses/index.js";
 
 const API_BASE =
   (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE) || "/api";
 
-const POSTING_FEE = BigInt("1000000000000000000"); // 1 VSP
-const PERMIT_VALUE = BigInt("10000000000000000000"); // 10 VSP buffer
+const DEFAULT_POSTING_FEE = BigInt("1000000000000000000"); // fallback
+const PERMIT_BUFFER_MULTIPLIER = 10n;
 
 export function useCreateLink() {
   const { address: userAddress, chain } = useAccount();
@@ -25,16 +25,18 @@ export function useCreateLink() {
   const getPermitIfNeeded = useCallback(
     async () => {
       if (!userAddress || !publicClient || !walletClient || !chain) return undefined;
+      const addresses = getAddresses(chain.id);
+      const postingFee = DEFAULT_POSTING_FEE;
       const currentAllowance = await fetchAllowance(
-        API_BASE, userAddress, FUJI_ADDRESSES.PostRegistry,
+        API_BASE, userAddress, addresses.PostRegistry,
       );
-      if (currentAllowance >= POSTING_FEE) return undefined;
+      if (currentAllowance >= DEFAULT_POSTING_FEE) return undefined;
       return signPermit({
         walletClient, publicClient,
-        tokenAddress: FUJI_ADDRESSES.VSPToken as Address,
+        tokenAddress: addresses.VSPToken as Address,
         tokenName: "VeriSphere", tokenVersion: "1",
-        spender: FUJI_ADDRESSES.PostRegistry as Address,
-        value: PERMIT_VALUE, chainId: chain.id,
+        spender: addresses.PostRegistry as Address,
+        value: DEFAULT_POSTING_FEE * 10n, chainId: chain.id,
       });
     },
     [userAddress, publicClient, walletClient, chain],
@@ -45,6 +47,7 @@ export function useCreateLink() {
       if (!userAddress || !publicClient) { setError("Wallet not connected"); return null; }
       setIsLoading(true); setError(null);
       try {
+        const addresses = getAddresses(chain?.id ?? 43113);
         const permit = await getPermitIfNeeded();
         const calldata = encodeFunctionData({
           abi: PostRegistryABI,
@@ -52,7 +55,7 @@ export function useCreateLink() {
           args: [BigInt(fromPostId), BigInt(toPostId), isChallenge],
         });
         const result = await sendMetaTx(
-          FUJI_ADDRESSES.PostRegistry as Address, calldata,
+          addresses.PostRegistry as Address, calldata,
           { gasLimit: 1_000_000, permit },
         );
         return result.tx_hash;
