@@ -62,7 +62,7 @@ export function useCreateLink() {
       } catch (err: any) {
         setError(err?.message || "Failed to create link");
         console.error("createLink error:", err);
-        return null;
+        throw err;
       } finally { setIsLoading(false); }
     },
     [userAddress, publicClient, sendMetaTx, getPermitIfNeeded],

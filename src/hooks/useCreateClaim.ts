@@ -100,7 +100,7 @@ export function useCreateClaim() {
       } catch (err: any) {
         setError(errorToString(err));
         console.error("createClaim error:", err);
-        return null;
+        throw err;
       } finally { setLoading(false); }
     },
     [userAddress, sendMetaTx, getPermitIfNeeded],

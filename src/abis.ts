@@ -791,6 +791,44 @@ export const StakeEngineABI = [
   },
   {
     "type": "function",
+    "name": "getTopPosts",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "p0",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "t0",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "p1",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "t1",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "p2",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "t2",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getUserLotInfo",
     "inputs": [
       {
@@ -968,6 +1006,19 @@ export const StakeEngineABI = [
   },
   {
     "type": "function",
+    "name": "rescanSMax",
+    "inputs": [
+      {
+        "name": "postIds",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "sMax",
     "inputs": [],
     "outputs": [
@@ -982,6 +1033,19 @@ export const StakeEngineABI = [
   {
     "type": "function",
     "name": "sMaxLastUpdatedEpoch",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "sMaxPostId",
     "inputs": [],
     "outputs": [
       {
@@ -1267,6 +1331,25 @@ export const StakeEngineABI = [
   },
   {
     "type": "event",
+    "name": "SMaxRescanned",
+    "inputs": [
+      {
+        "name": "newSMax",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newSMaxPostId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "SnapshotPeriodSet",
     "inputs": [
       {
@@ -1440,6 +1523,11 @@ export const StakeEngineABI = [
   {
     "type": "error",
     "name": "NotInitializing",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OppositeSideStaked",
     "inputs": []
   },
   {

@@ -72,7 +72,7 @@ export function useStake() {
       } catch (err: any) {
         setError(errorToString(err));
         console.error("stake error:", err);
-        return null;
+        throw err;
       } finally { setLoading(false); }
     },
     [userAddress, sendMetaTx, getPermitIfNeeded],
@@ -100,7 +100,7 @@ export function useStake() {
       } catch (err: any) {
         setError(errorToString(err));
         console.error("withdraw error:", err);
-        return null;
+        throw err;
       } finally { setLoading(false); }
     },
     [userAddress, sendMetaTx],
