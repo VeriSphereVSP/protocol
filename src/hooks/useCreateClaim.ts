@@ -96,6 +96,20 @@ export function useCreateClaim() {
 
         setTxHash(result.tx_hash);
         if (result.claim) { setClaimState(result.claim); return result.claim; }
+        // tx_hash present but backend didn't decode claim state — retry by looking up the claim by text
+        if (result.tx_hash) {
+          try {
+            const lookup = await checkClaimOnChain(API_BASE, text);
+            if (lookup.exists && lookup.post_id != null) {
+              const state: ClaimState = {
+                post_id: lookup.post_id, text, creator: userAddress,
+                support_total: 0, challenge_total: 0,
+              };
+              setClaimState(state);
+              return state;
+            }
+          } catch {}
+        }
         return null;
       } catch (err: any) {
         setError(errorToString(err));
