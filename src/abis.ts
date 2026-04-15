@@ -2178,6 +2178,30 @@ export const ProtocolViewsABI = [
   },
   {
     "type": "function",
+    "name": "getEdgeContribution",
+    "inputs": [
+      {
+        "name": "targetClaimPostId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "linkPostId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "int256",
+        "internalType": "int256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getEffectiveVSRay",
     "inputs": [
       {
