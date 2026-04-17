@@ -6,20 +6,38 @@ import { useMetaTx } from "./useMetaTx.js";
 import { signPermit, fetchAllowance, fetchBalance, checkClaimOnChain } from "./relay.js";
 import { PostRegistryABI } from "../abis.js";
 import { getAddresses } from "../addresses/index.js";
-import type { RelayResponse, ClaimState } from "./types.js";
+import type { RelayResponse, ClaimState, SimilarClaim } from "./types.js";
 
 const API_BASE =
   (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE) || "/api";
 
-// Posting fee is fetched from backend (governance-configurable)
 const DEFAULT_POSTING_FEE = BigInt("1000000000000000000"); // 1 VSP fallback
-const PERMIT_BUFFER_MULTIPLIER = 10n; // permit for 10x the fee
 
 function errorToString(err: any): string {
   if (typeof err === "string") return err;
   if (err?.shortMessage) return err.shortMessage;
   if (err?.message) return err.message;
   try { return JSON.stringify(err); } catch { return "Unknown error"; }
+}
+
+/** Response shape from /api/claims/check-similar */
+interface CheckSimilarResponse {
+  matches: SimilarClaim[];
+  provider?: string;
+  error?: string;
+}
+
+/** Call /api/claims/check-similar to find semantically similar existing claims. */
+async function checkSimilarClaims(apiBase: string, text: string): Promise<CheckSimilarResponse> {
+  try {
+    const res = await fetch(
+      `${apiBase}/claims/check-similar?text=${encodeURIComponent(text)}&threshold=0.85&top_k=5`,
+    );
+    if (!res.ok) return { matches: [] };
+    return await res.json();
+  } catch {
+    return { matches: [] };  // Fail open
+  }
 }
 
 export function useCreateClaim() {
@@ -32,6 +50,8 @@ export function useCreateClaim() {
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [claimState, setClaimState] = useState<ClaimState | null>(null);
+  const [isDuplicate, setIsDuplicate] = useState(false);
+  const [similarClaims, setSimilarClaims] = useState<SimilarClaim[]>([]);
 
   const getPermitIfNeeded = useCallback(
     async () => {
@@ -53,13 +73,95 @@ export function useCreateClaim() {
     [userAddress, publicClient, walletClient, chain],
   );
 
+  /**
+   * Pre-flight duplicate check. Returns:
+   *   { proceed: true }                     — no duplicates found, safe to create
+   *   { proceed: false, blocked: true }     — high-similarity or exact match, creation prohibited
+   *   { proceed: false, blocked: false }    — medium-similarity, user should confirm
+   */
+  const checkDuplicates = useCallback(
+    async (text: string): Promise<{ proceed: boolean; blocked?: boolean; state?: ClaimState }> => {
+      setError(null);
+      setIsDuplicate(false);
+      setSimilarClaims([]);
+
+      // Step 1: Exact on-chain duplicate check (always runs, even with stub embeddings)
+      const existing = await checkClaimOnChain(API_BASE, text);
+      if (existing.exists && existing.post_id != null) {
+        const state: ClaimState = {
+          post_id: existing.post_id,
+          text,
+          creator: userAddress || "",
+          support_total: 0,
+          challenge_total: 0,
+        };
+        setClaimState(state);
+        setIsDuplicate(true);
+        setError(`This exact claim already exists (post #${existing.post_id}). Stake on the existing claim instead.`);
+        window.dispatchEvent(new CustomEvent("verisphere:toast", {
+          detail: { message: `Claim already exists as post #${existing.post_id}`, type: "warning" },
+        }));
+        return { proceed: false, blocked: true, state };
+      }
+
+      // Step 2: Semantic similarity check (only meaningful with real embeddings)
+      const similar = await checkSimilarClaims(API_BASE, text);
+
+      // If using stub provider, skip semantic analysis
+      if (similar.provider === "stub") {
+        return { proceed: true };
+      }
+
+      if (similar.matches && similar.matches.length > 0) {
+        setSimilarClaims(similar.matches);
+
+        const highMatch = similar.matches.find((m) => m.level === "high");
+        if (highMatch) {
+          // >= 0.95 similarity — block creation
+          setIsDuplicate(true);
+          const pct = (highMatch.similarity * 100).toFixed(0);
+          setError(
+            `A very similar claim already exists: "${highMatch.text.slice(0, 80)}${highMatch.text.length > 80 ? "…" : ""}" (post #${highMatch.post_id}, ${pct}% similar). Stake on the existing claim instead.`,
+          );
+          window.dispatchEvent(new CustomEvent("verisphere:toast", {
+            detail: {
+              message: `Very similar claim exists (post #${highMatch.post_id}, ${pct}% match)`,
+              type: "warning",
+            },
+          }));
+          const state: ClaimState = {
+            post_id: highMatch.post_id,
+            text: highMatch.text,
+            creator: "",
+            support_total: 0,
+            challenge_total: 0,
+          };
+          setClaimState(state);
+          return { proceed: false, blocked: true, state };
+        }
+
+        // Medium matches (0.85–0.95) — warn but allow override
+        const topMatch = similar.matches[0];
+        const pct = (topMatch.similarity * 100).toFixed(0);
+        setError(
+          `Similar claim found: "${topMatch.text.slice(0, 80)}${topMatch.text.length > 80 ? "…" : ""}" (post #${topMatch.post_id}, ${pct}% similar). Create anyway?`,
+        );
+        return { proceed: false, blocked: false };
+      }
+
+      return { proceed: true };
+    },
+    [userAddress],
+  );
+
   const createClaim = useCallback(
-    async (text: string): Promise<ClaimState | null> => {
+    async (text: string, skipDuplicateCheck?: boolean): Promise<ClaimState | null> => {
       if (!userAddress) { setError("Wallet not connected"); return null; }
       setLoading(true); setError(null); setTxHash(null); setClaimState(null);
+      setIsDuplicate(false); setSimilarClaims([]);
       try {
         const addresses = getAddresses(chain?.id ?? 43113);
-        const postingFee = DEFAULT_POSTING_FEE; // TODO: fetch from backend when /api/fees returns posting_fee_wei
+        const postingFee = DEFAULT_POSTING_FEE;
 
         // Check balance
         const balance = await fetchBalance(API_BASE, userAddress);
@@ -68,15 +170,15 @@ export function useCreateClaim() {
           return null;
         }
 
-        // Check if already on-chain
-        const existing = await checkClaimOnChain(API_BASE, text);
-        if (existing.exists && existing.post_id != null) {
-          const state: ClaimState = {
-            post_id: existing.post_id, text, creator: userAddress,
-            support_total: 0, challenge_total: 0,
-          };
-          setClaimState(state);
-          return state;
+        // Duplicate checks (unless explicitly skipped for medium-similarity override)
+        if (!skipDuplicateCheck) {
+          const dupResult = await checkDuplicates(text);
+          if (!dupResult.proceed) {
+            // For blocked (high similarity / exact match), return null — callers must not proceed
+            // For medium similarity (not blocked), also return null — caller should show
+            // the warning and let user re-call with skipDuplicateCheck=true
+            return null;
+          }
         }
 
         // Get permit if needed
@@ -94,9 +196,24 @@ export function useCreateClaim() {
           { gasLimit: 2_000_000, permit },
         );
 
+        // Check if the relay detected a duplicate (belt-and-suspenders)
+        if (result.duplicate) {
+          setIsDuplicate(true);
+          const msg = result.claim
+            ? `This claim already exists (post #${result.claim.post_id}). No VSP was charged.`
+            : "This claim already exists on-chain. No VSP was charged.";
+          setError(msg);
+          window.dispatchEvent(new CustomEvent("verisphere:toast", {
+            detail: { message: msg, type: "warning" },
+          }));
+          if (result.claim) setClaimState(result.claim);
+          return null;  // Return null so callers don't proceed
+        }
+
         setTxHash(result.tx_hash);
         if (result.claim) { setClaimState(result.claim); return result.claim; }
-        // tx_hash present but backend didn't decode claim state — retry by looking up the claim by text
+
+        // tx_hash present but backend didn't decode claim state — retry lookup
         if (result.tx_hash) {
           try {
             const lookup = await checkClaimOnChain(API_BASE, text);
@@ -112,14 +229,25 @@ export function useCreateClaim() {
         }
         return null;
       } catch (err: any) {
-        setError(errorToString(err));
+        const msg = errorToString(err);
+        if (msg.toLowerCase().includes("claim already exists") || msg.toLowerCase().includes("duplicate")) {
+          setIsDuplicate(true);
+          setError("This claim already exists on-chain. No VSP was charged.");
+        } else {
+          setError(msg);
+        }
         console.error("createClaim error:", err);
         throw err;
       } finally { setLoading(false); }
     },
-    [userAddress, sendMetaTx, getPermitIfNeeded],
+    [userAddress, sendMetaTx, getPermitIfNeeded, checkDuplicates],
   );
 
-  return { createClaim, loading, error, txHash, claimState,
-    needsApproval: false, approveVSP: async () => {} };
+  return {
+    createClaim,
+    checkDuplicates,
+    loading, error, txHash, claimState,
+    isDuplicate, similarClaims,
+    needsApproval: false, approveVSP: async () => {},
+  };
 }

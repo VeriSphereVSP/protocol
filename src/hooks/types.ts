@@ -31,9 +31,19 @@ export interface ClaimState {
   user_challenge?: number;
 }
 
+/** A semantically similar existing claim returned by /api/claims/check-similar. */
+export interface SimilarClaim {
+  post_id: number;
+  text: string;
+  similarity: number;
+  level: "high" | "medium";
+}
+
 /** Common state shape for write hooks. */
 export interface WriteHookState {
   loading: boolean;
   error: string | null;
   txHash: string | null;
+  isDuplicate?: boolean;
+  similarClaims?: SimilarClaim[];
 }
