@@ -967,19 +967,6 @@ export const StakeEngineABI = [
   },
   {
     "type": "function",
-    "name": "numTranches",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "proxiableUUID",
     "inputs": [],
     "outputs": [
@@ -1032,6 +1019,32 @@ export const StakeEngineABI = [
   },
   {
     "type": "function",
+    "name": "sMaxDecayMaxEpochs",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "sMaxDecayRateRay",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "sMaxLastUpdatedEpoch",
     "inputs": [],
     "outputs": [
@@ -1058,10 +1071,23 @@ export const StakeEngineABI = [
   },
   {
     "type": "function",
-    "name": "setNumTranches",
+    "name": "setSMaxDecayMaxEpochs",
     "inputs": [
       {
-        "name": "newTranches",
+        "name": "newMax",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setSMaxDecayRate",
+    "inputs": [
+      {
+        "name": "newRate",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1281,25 +1307,6 @@ export const StakeEngineABI = [
   },
   {
     "type": "event",
-    "name": "NumTranchesSet",
-    "inputs": [
-      {
-        "name": "oldTranches",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "newTranches",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "PositionsRescaled",
     "inputs": [
       {
@@ -1353,6 +1360,44 @@ export const StakeEngineABI = [
       },
       {
         "name": "challengeTotal",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SMaxDecayMaxEpochsSet",
+    "inputs": [
+      {
+        "name": "oldMax",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newMax",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SMaxDecayRateSet",
+    "inputs": [
+      {
+        "name": "oldRate",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newRate",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -1518,6 +1563,16 @@ export const StakeEngineABI = [
   },
   {
     "type": "error",
+    "name": "InvalidDecayMaxEpochs",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidDecayRate",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidInitialization",
     "inputs": []
   },
@@ -1529,11 +1584,6 @@ export const StakeEngineABI = [
   {
     "type": "error",
     "name": "InvalidSnapshotPeriod",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "InvalidTranches",
     "inputs": []
   },
   {
