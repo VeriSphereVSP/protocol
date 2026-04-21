@@ -588,11 +588,6 @@ export const PostRegistryABI = [
   },
   {
     "type": "error",
-    "name": "LinkGraphAlreadySet",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "LinkGraphNotSet",
     "inputs": []
   },
@@ -865,11 +860,6 @@ export const StakeEngineABI = [
       },
       {
         "name": "sideTotal",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "tranche",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -2098,11 +2088,6 @@ export const LinkGraphABI = [
   },
   {
     "type": "error",
-    "name": "RegistryAlreadySet",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "SelfLoop",
     "inputs": []
   },
@@ -2711,7 +2696,13 @@ export const ProtocolViewsABI = [
 export const VSPTokenABI = [
   {
     "type": "constructor",
-    "inputs": [],
+    "inputs": [
+      {
+        "name": "trustedForwarder_",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
     "stateMutability": "nonpayable"
   },
   {
@@ -2922,6 +2913,25 @@ export const VSPTokenABI = [
   },
   {
     "type": "function",
+    "name": "isTrustedForwarder",
+    "inputs": [
+      {
+        "name": "forwarder",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "mint",
     "inputs": [
       {
@@ -3104,6 +3114,19 @@ export const VSPTokenABI = [
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "trustedForwarder",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",

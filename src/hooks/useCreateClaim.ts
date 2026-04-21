@@ -115,37 +115,24 @@ export function useCreateClaim() {
       if (similar.matches && similar.matches.length > 0) {
         setSimilarClaims(similar.matches);
 
-        const highMatch = similar.matches.find((m) => m.level === "high");
-        if (highMatch) {
-          // >= 0.95 similarity — block creation
-          setIsDuplicate(true);
-          const pct = (highMatch.similarity * 100).toFixed(0);
-          setError(
-            `A very similar claim already exists: "${highMatch.text.slice(0, 80)}${highMatch.text.length > 80 ? "…" : ""}" (post #${highMatch.post_id}, ${pct}% similar). Stake on the existing claim instead.`,
-          );
+        // All semantic matches warn — only exact on-chain text match blocks.
+        const topMatch = similar.matches[0];
+        const pct = (topMatch.similarity * 100).toFixed(0);
+        const isHigh = topMatch.level === "high";
+        const preview = topMatch.text.slice(0, 80) + (topMatch.text.length > 80 ? "…" : "");
+        setError(
+          isHigh
+            ? `Very similar claim exists: "${preview}" (post #${topMatch.post_id}, ${pct}% similar). Create anyway?`
+            : `Similar claim found: "${preview}" (post #${topMatch.post_id}, ${pct}% similar). Create anyway?`,
+        );
+        if (isHigh) {
           window.dispatchEvent(new CustomEvent("verisphere:toast", {
             detail: {
-              message: `Very similar claim exists (post #${highMatch.post_id}, ${pct}% match)`,
+              message: `Very similar claim exists (post #${topMatch.post_id}, ${pct}% match). Create anyway?`,
               type: "warning",
             },
           }));
-          const state: ClaimState = {
-            post_id: highMatch.post_id,
-            text: highMatch.text,
-            creator: "",
-            support_total: 0,
-            challenge_total: 0,
-          };
-          setClaimState(state);
-          return { proceed: false, blocked: true, state };
         }
-
-        // Medium matches (0.85–0.95) — warn but allow override
-        const topMatch = similar.matches[0];
-        const pct = (topMatch.similarity * 100).toFixed(0);
-        setError(
-          `Similar claim found: "${topMatch.text.slice(0, 80)}${topMatch.text.length > 80 ? "…" : ""}" (post #${topMatch.post_id}, ${pct}% similar). Create anyway?`,
-        );
         return { proceed: false, blocked: false };
       }
 
@@ -170,14 +157,16 @@ export function useCreateClaim() {
           return null;
         }
 
-        // Duplicate checks (unless explicitly skipped for medium-similarity override)
+        // Duplicate checks (unless explicitly skipped)
         if (!skipDuplicateCheck) {
           const dupResult = await checkDuplicates(text);
           if (!dupResult.proceed) {
-            // For blocked (high similarity / exact match), return null — callers must not proceed
-            // For medium similarity (not blocked), also return null — caller should show
-            // the warning and let user re-call with skipDuplicateCheck=true
-            return null;
+            if (dupResult.blocked) {
+              // Exact on-chain match — hard block, return null
+              return null;
+            }
+            // Semantic similarity warning — toast was shown, proceed anyway.
+            // The user already clicked "Create & stake" expressing intent.
           }
         }
 
