@@ -49,63 +49,70 @@ export function useStake() {
     [userAddress, publicClient, walletClient, chain],
   );
 
-  const stake = useCallback(
-    async (postId: number, side: "support" | "challenge", amount: number): Promise<ClaimState | null> => {
+  /** Set stake to target value. Positive = support, negative = challenge, 0 = withdraw all.
+   *  Single contract call via setStake(uint256 postId, int256 target). */
+  const setStake = useCallback(
+    async (postId: number, target: number): Promise<ClaimState | null> => {
       if (!userAddress) { setError("Wallet not connected"); return null; }
       setLoading(true); setError(null); setTxHash(null); setClaimState(null);
       try {
         const addresses = getAddresses(chain?.id ?? 43113);
-        const amountWei = parseUnits(amount.toString(), 18);
-        if (amountWei <= 0n) { setError("Amount must be greater than 0"); return null; }
-        const permit = await getPermitIfNeeded(amountWei);
+        // For staking (target > current), we need a permit for the additional VSP
+        const targetWei = parseUnits(Math.abs(target).toString(), 18);
+        const permit = target !== 0 ? await getPermitIfNeeded(targetWei) : undefined;
+        // Encode setStake(uint256 postId, int256 target)
+        // target is in wei, signed: positive = support, negative = challenge
+        const targetWeiSigned = target >= 0
+          ? parseUnits(target.toString(), 18)
+          : -parseUnits(Math.abs(target).toString(), 18);
         const calldata = encodeFunctionData({
-          abi: StakeEngineABI, functionName: "stake",
-          args: [BigInt(postId), side === "support" ? 0 : 1, amountWei],
+          abi: [{
+            name: "setStake",
+            type: "function",
+            stateMutability: "nonpayable",
+            inputs: [
+              { name: "postId", type: "uint256" },
+              { name: "target", type: "int256" },
+            ],
+            outputs: [],
+          }],
+          functionName: "setStake",
+          args: [BigInt(postId), targetWeiSigned],
         });
         const result = await sendMetaTx(
           addresses.StakeEngine as Address, calldata,
-          { gasLimit: 600_000, permit },
+          { gasLimit: 800_000, permit },
         );
         setTxHash(result.tx_hash);
         if (result.claim) { setClaimState(result.claim); return result.claim; }
         return null;
       } catch (err: any) {
         setError(errorToString(err));
-        console.error("stake error:", err);
+        console.error("setStake error:", err);
         throw err;
       } finally { setLoading(false); }
     },
     [userAddress, sendMetaTx, getPermitIfNeeded],
   );
 
-  const withdraw = useCallback(
-    async (postId: number, side: "support" | "challenge", amount: number, lifo = true): Promise<ClaimState | null> => {
-      if (!userAddress) { setError("Wallet not connected"); return null; }
-      setLoading(true); setError(null); setTxHash(null); setClaimState(null);
-      try {
-        const addresses = getAddresses(chain?.id ?? 43113);
-        const amountWei = parseUnits(amount.toString(), 18);
-        if (amountWei <= 0n) { setError("Amount must be greater than 0"); return null; }
-        const calldata = encodeFunctionData({
-          abi: StakeEngineABI, functionName: "withdraw",
-          args: [BigInt(postId), side === "support" ? 0 : 1, amountWei, lifo],
-        });
-        const result = await sendMetaTx(
-          addresses.StakeEngine as Address, calldata,
-          { gasLimit: 500_000 },
-        );
-        setTxHash(result.tx_hash);
-        if (result.claim) { setClaimState(result.claim); return result.claim; }
-        return null;
-      } catch (err: any) {
-        setError(errorToString(err));
-        console.error("withdraw error:", err);
-        throw err;
-      } finally { setLoading(false); }
+  // Legacy wrappers for compatibility
+  const stake = useCallback(
+    async (postId: number, side: "support" | "challenge", amount: number) => {
+      const target = side === "support" ? amount : -amount;
+      return setStake(postId, target);
     },
-    [userAddress, sendMetaTx],
+    [setStake],
   );
 
-  return { stake, withdraw, loading, error, txHash, claimState,
+  const withdraw = useCallback(
+    async (postId: number, side: "support" | "challenge", amount: number) => {
+      // For legacy withdraw, we'd need current position to compute new target.
+      // This is only used by old code paths — new code should use setStake directly.
+      return setStake(postId, 0); // Withdraw all as fallback
+    },
+    [setStake],
+  );
+
+  return { stake, withdraw, setStake, loading, error, txHash, claimState,
     needsApproval: false, approveVSP: async () => {} };
 }

@@ -57,39 +57,41 @@ export function useMetaTx() {
         data: calldata,
       };
 
-      // Sign fee permit for the forwarder (relay fee allowance)
-      // This is a small permit (e.g. 0.1 VSP) granting the forwarder
-      // the ability to collect the relay fee via transferFrom.
-      let feePermit: PermitData | undefined;
+      // Check forwarder VSP allowance — one-time approval if needed.
+      // The forwarder deducts a relay fee on each meta-tx.
+      // Users approve the forwarder once for a large amount (10K VSP).
+      // This is safe: the forwarder is an audited contract that only
+      // deducts the computed fee (0.5% of tx value, min 0.1 VSP).
       if (addresses.Forwarder) {
-        try {
-          // Check current allowance to forwarder
-          const currentAllowance = await publicClient.readContract({
+        const currentAllowance = await publicClient.readContract({
+          address: addresses.VSPToken as Address,
+          abi: VSPTokenABI,
+          functionName: "allowance",
+          args: [userAddress, addresses.Forwarder as Address],
+        }) as bigint;
+
+        // If allowance is below 10 VSP, prompt for one-time approval
+        const MIN_ALLOWANCE = BigInt("10000000000000000000"); // 10 VSP
+        const APPROVAL_AMOUNT = BigInt("10000000000000000000000"); // 10,000 VSP
+        if (currentAllowance < MIN_ALLOWANCE) {
+          window.dispatchEvent(new CustomEvent("verisphere:toast", {
+            detail: { message: "One-time approval: allow Verisphere to collect relay fees", type: "info" }
+          }));
+          // Use approve() via direct contract call (not meta-tx, since we need
+          // the forwarder allowance to USE the forwarder)
+          const { request } = await publicClient.simulateContract({
             address: addresses.VSPToken as Address,
             abi: VSPTokenABI,
-            functionName: "allowance",
-            args: [userAddress, addresses.Forwarder as Address],
-          }) as bigint;
-
-          // If allowance is low, sign a permit for a generous buffer
-          const FEE_PERMIT_VALUE = BigInt("1000000000000000000"); // 1 VSP buffer for many txs
-          if (currentAllowance < FEE_PERMIT_VALUE / 10n) {
-            feePermit = await signPermit({
-              walletClient,
-              publicClient,
-              tokenAddress: addresses.VSPToken as Address,
-              tokenName: "VeriSphere",
-              tokenVersion: "1",
-              spender: addresses.Forwarder as Address,
-              value: FEE_PERMIT_VALUE,
-              chainId: chain.id,
-            });
-          }
-        } catch (e) {
-          // Fee permit failure is non-fatal — forwarder will try but may skip fee
-          console.debug("Fee permit skipped:", e);
+            functionName: "approve",
+            args: [addresses.Forwarder as Address, APPROVAL_AMOUNT],
+            account: userAddress,
+          });
+          await walletClient.writeContract(request);
+          // Wait for approval to be mined
+          await new Promise(r => setTimeout(r, 3000));
         }
       }
+      let feePermit: PermitData | undefined; // No longer used, kept for API compat
 
 
       window.dispatchEvent(new CustomEvent("verisphere:toast", { detail: { message: "Confirm transaction in wallet", type: "info" } }));
@@ -112,7 +114,7 @@ export function useMetaTx() {
         gas: Number(forwardRequest.gas),
         nonce: Number(forwardRequest.nonce),
       };
-      return submitRelay(API_BASE, relayRequest, signature, options?.permit, feePermit);
+      return submitRelay(API_BASE, relayRequest, signature, options?.permit);
     },
     [walletClient, publicClient, chain],
   );

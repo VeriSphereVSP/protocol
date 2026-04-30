@@ -1100,6 +1100,24 @@ export const StakeEngineABI = [
   },
   {
     "type": "function",
+    "name": "setStake",
+    "inputs": [
+      {
+        "name": "postId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "target",
+        "type": "int256",
+        "internalType": "int256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "snapshotPeriod",
     "inputs": [],
     "outputs": [
