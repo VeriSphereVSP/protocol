@@ -58,10 +58,7 @@ export function useMetaTx() {
       };
 
       // Check forwarder VSP allowance — one-time approval if needed.
-      // The forwarder deducts a relay fee on each meta-tx.
-      // Users approve the forwarder once for a large amount (10K VSP).
-      // This is safe: the forwarder is an audited contract that only
-      // deducts the computed fee (0.5% of tx value, min 0.1 VSP).
+      // Uses ERC-2612 permit (no AVAX required) instead of direct approve().
       if (addresses.Forwarder) {
         const currentAllowance = await publicClient.readContract({
           address: addresses.VSPToken as Address,
@@ -70,28 +67,43 @@ export function useMetaTx() {
           args: [userAddress, addresses.Forwarder as Address],
         }) as bigint;
 
-        // If allowance is below 10 VSP, prompt for one-time approval
         const MIN_ALLOWANCE = BigInt("10000000000000000000"); // 10 VSP
         const APPROVAL_AMOUNT = BigInt("10000000000000000000000"); // 10,000 VSP
         if (currentAllowance < MIN_ALLOWANCE) {
           window.dispatchEvent(new CustomEvent("verisphere:toast", {
-            detail: { message: "One-time approval: allow Verisphere to collect relay fees", type: "info" }
+            detail: { message: "One-time approval: sign a permit to allow relay fees (no gas needed)", type: "info" }
           }));
-          // Use approve() via direct contract call (not meta-tx, since we need
-          // the forwarder allowance to USE the forwarder)
-          const { request } = await publicClient.simulateContract({
-            address: addresses.VSPToken as Address,
-            abi: VSPTokenABI,
-            functionName: "approve",
-            args: [addresses.Forwarder as Address, APPROVAL_AMOUNT],
-            account: userAddress,
+          // Sign ERC-2612 permit granting forwarder allowance
+          const permit = await signPermit({
+            walletClient, publicClient,
+            tokenAddress: addresses.VSPToken as Address,
+            tokenName: "VeriSphere", tokenVersion: "1",
+            spender: addresses.Forwarder as Address,
+            value: APPROVAL_AMOUNT, chainId: chain.id,
           });
-          await walletClient.writeContract(request);
-          // Wait for approval to be mined
+          // Execute permit via MM (no AVAX needed — MM pays gas)
+          const execRes = await fetch(`${API_BASE}/mm/execute-permit`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token: addresses.VSPToken,
+              owner: userAddress,
+              spender: addresses.Forwarder,
+              value: APPROVAL_AMOUNT.toString(),
+              deadline: permit.deadline,
+              v: permit.v,
+              r: permit.r,
+              s: permit.s,
+            }),
+          });
+          if (!execRes.ok) {
+            const err = await execRes.text();
+            throw new Error(`Permit execution failed: ${err}`);
+          }
+          // Wait for permit to be mined
           await new Promise(r => setTimeout(r, 3000));
         }
       }
-      let feePermit: PermitData | undefined; // No longer used, kept for API compat
 
 
       window.dispatchEvent(new CustomEvent("verisphere:toast", { detail: { message: "Confirm transaction in wallet", type: "info" } }));

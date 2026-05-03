@@ -44,7 +44,7 @@ export function useCreateLink() {
 
   const createLink = useCallback(
     async (fromPostId: number, toPostId: number, isChallenge: boolean): Promise<string | null> => {
-      if (!userAddress || !publicClient) { setError("Wallet not connected"); return null; }
+      if (!userAddress || !publicClient) { throw new Error("Wallet not connected"); }
       setIsLoading(true); setError(null);
       try {
         const addresses = getAddresses(chain?.id ?? 43113);

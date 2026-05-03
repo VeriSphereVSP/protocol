@@ -143,7 +143,7 @@ export function useCreateClaim() {
 
   const createClaim = useCallback(
     async (text: string, skipDuplicateCheck?: boolean): Promise<ClaimState | null> => {
-      if (!userAddress) { setError("Wallet not connected"); return null; }
+      if (!userAddress) { throw new Error("Wallet not connected"); }
       setLoading(true); setError(null); setTxHash(null); setClaimState(null);
       setIsDuplicate(false); setSimilarClaims([]);
       try {
@@ -153,8 +153,9 @@ export function useCreateClaim() {
         // Check balance
         const balance = await fetchBalance(API_BASE, userAddress);
         if (balance < postingFee) {
-          setError("Insufficient VSP balance (need 1 VSP to create a claim)");
-          return null;
+          const msg = "Insufficient VSP balance (need 1 VSP to create a claim)";
+          setError(msg);
+          throw new Error(msg);
         }
 
         // Duplicate checks (unless explicitly skipped)
@@ -162,8 +163,8 @@ export function useCreateClaim() {
           const dupResult = await checkDuplicates(text);
           if (!dupResult.proceed) {
             if (dupResult.blocked) {
-              // Exact on-chain match — hard block, return null
-              return null;
+              // Exact on-chain match — hard block
+              throw new Error("This exact claim already exists");
             }
             // Semantic similarity warning — toast was shown, proceed anyway.
             // The user already clicked "Create & stake" expressing intent.
@@ -196,7 +197,7 @@ export function useCreateClaim() {
             detail: { message: msg, type: "warning" },
           }));
           if (result.claim) setClaimState(result.claim);
-          return null;  // Return null so callers don't proceed
+          throw new Error("Claim creation failed");
         }
 
         setTxHash(result.tx_hash);
