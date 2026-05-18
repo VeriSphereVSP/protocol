@@ -206,3 +206,53 @@ function extractErrorMessage(err: any): string {
     return "Unknown error";
   }
 }
+
+// patch_bundle04b1_async — appended by bundle 4b-1 patch.
+// New /api/relay/async submission path. Returns immediately with
+// tx_hash + tx_log_id; downstream code awaits resolution via the
+// notifications/waitForTx mechanism.
+
+export interface AsyncRelayResponse {
+  tx_hash: string;
+  tx_log_id: number;
+  action_type: string;
+  action_value: number | null;
+  status: "submitted" | "duplicate_claim";
+  // For duplicate_claim case:
+  claim?: {
+    post_id: number;
+    text: string;
+    creator: string;
+    support_total: number;
+    challenge_total: number;
+  };
+}
+
+/** Submit a signed meta-tx via the async endpoint. Does NOT wait for
+ *  receipt — returns the moment the relay server has the tx_hash. */
+export async function submitRelayAsync(
+  apiBase: string,
+  request: Record<string, unknown>,
+  signature: string,
+  permit?: PermitData,
+  feePermit?: PermitData,
+): Promise<AsyncRelayResponse> {
+  const body: Record<string, unknown> = { request, signature };
+  if (permit) body.permit = permit;
+  if (feePermit) body.fee_permit = feePermit;
+
+  const res = await fetch(`${apiBase}/relay/async`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({ detail: res.statusText }));
+    const msg =
+      typeof errBody === "string"
+        ? errBody
+        : errBody?.detail || errBody?.message || JSON.stringify(errBody);
+    throw new Error(msg);
+  }
+  return await res.json();
+}
