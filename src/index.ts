@@ -20,6 +20,14 @@ export type {
   ContractAddresses,
 } from "./types.js";
 
+// Bundle 5 contract cap constants (manually synced to chain values)
+export {
+  POST_REGISTRY_MAX_CLAIM_LENGTH,
+  LINKGRAPH_MAX_OUTGOING_LINKS_PER_CLAIM,
+  LINKGRAPH_MAX_INCOMING_LINKS_PER_CLAIM,
+  STAKE_ENGINE_MAX_STAKE_AMOUNT,
+} from "./constants.js";
+
 // Deployment addresses (written by post-deploy.sh)
 export { FUJI_ADDRESSES, getAddresses, SUPPORTED_CHAINS } from "./addresses/index.js";
 

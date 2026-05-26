@@ -21,6 +21,8 @@ import type { Hex, Address } from "viem";
 import { getAddresses } from "../addresses/index.js";
 import { VSPTokenABI } from "../abis.js";
 import { fetchNonce, signPermit, submitRelayAsync } from "./relay.js";
+// patch_bundle04_5_p4_useMetaTx_rewire
+import { waitForTxConfirmation } from "./useTxConfirmation.js";
 import type { RelayResponse, PermitData } from "./types.js";
 
 const API_BASE =
@@ -30,40 +32,9 @@ const API_BASE =
 // Timeout default is generous: chain confirmation + indexer poll interval
 // can take 20-30s on Fuji. The user sees a notifications-panel entry
 // throughout, so a longer wait doesn't feel broken.
-const TX_RESOLVE_TIMEOUT_MS = 90_000;
-
-type TxResolvedDetail = {
-  tx_log_id: number;
-  tx_hash: string;
-  status: "confirmed" | "reverted" | "dropped";
-  block_number?: number;
-  gas_used?: number;
-  post_id?: number;
-  error_message?: string;
-};
-
-async function waitForTxResolution(tx_log_id: number): Promise<TxResolvedDetail> {
-  return new Promise<TxResolvedDetail>((resolve, reject) => {
-    let done = false;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as TxResolvedDetail | undefined;
-      if (!detail || detail.tx_log_id !== tx_log_id) return;
-      done = true;
-      window.removeEventListener("verisphere:tx-resolved", handler);
-      resolve(detail);
-    };
-    window.addEventListener("verisphere:tx-resolved", handler);
-    // Ask the notifications poller to refresh immediately so latency
-    // isn't bounded by the poll interval.
-    window.dispatchEvent(new CustomEvent("verisphere:notifications-refresh"));
-
-    setTimeout(() => {
-      if (done) return;
-      window.removeEventListener("verisphere:tx-resolved", handler);
-      reject(new Error("Transaction timed out — check notifications for status"));
-    }, TX_RESOLVE_TIMEOUT_MS);
-  });
-}
+// patch_bundle04_5_p5_strip_tx_diag: dead pre-patch-4 wait helper and its
+// supporting type/const removed, along with diagnostic console output
+// added in patch 3.6.2 for the staking-timeout investigation.
 
 const FORWARD_REQUEST_TYPES = {
   ForwardRequest: [
@@ -204,7 +175,12 @@ export function useMetaTx() {
       }
 
       // Submitted to chain; await the notifications watcher's resolution.
-      const resolved = await waitForTxResolution(submitResp.tx_log_id);
+      // patch_bundle04_5_p4_useMetaTx_rewire: key by tx_hash, not tx_log_id.
+      // Reason: the unified notifications feed dedupes by tx_hash and the
+      // winning row often has source !== "tx_log" (chain_tx wins on
+      // confirmed protocol events). The dispatch fires per tx_hash so
+      // the resolution-wait must subscribe by tx_hash too.
+      const resolved = await waitForTxConfirmation(submitResp.tx_hash);
 
       if (resolved.status === "confirmed") {
         // Synthesize RelayResponse shape. `claim` is intentionally
