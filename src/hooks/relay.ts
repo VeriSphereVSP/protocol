@@ -70,33 +70,65 @@ const EIP712_DOMAIN_ABI = [
     ],
   },
 ] as const;
-const permitDomainCache = new Map<string, { name: string; version: string }>();
+const eip712DomainCache = new Map<string, { name: string; version: string }>();
 
 /**
- * Read a token's EIP-712 domain (name, version) from eip712Domain() on-chain.
- * Read-or-throw: never returns a guessed domain. Cached per token address.
+ * Read a contract's EIP-712 domain (name, version) from eip712Domain()
+ * (EIP-5267) on-chain. Read-or-throw: never returns a guessed domain. Cached
+ * per contract address. Works for any EIP-712 signer — the token (permits) and
+ * the trusted Forwarder (ForwardRequest) both expose eip712Domain().
  */
-export async function readPermitDomain(
+export async function readEip712Domain(
   publicClient: PublicClient,
-  token: Address,
+  contract: Address,
 ): Promise<{ name: string; version: string }> {
-  const key = token.toLowerCase();
-  const hit = permitDomainCache.get(key);
+  const key = contract.toLowerCase();
+  const hit = eip712DomainCache.get(key);
   if (hit) return hit;
-  if (!publicClient) throw new Error("No RPC client available to read permit domain");
+  if (!publicClient) throw new Error("No RPC client available to read EIP-712 domain");
   const d: any = await publicClient.readContract({
-    address: token,
+    address: contract,
     abi: EIP712_DOMAIN_ABI,
     functionName: "eip712Domain",
   });
   const name = d[1] as string;
   const version = d[2] as string;
   if (!name || !version) {
-    throw new Error("eip712Domain() returned empty name/version; refusing to sign a guessed permit domain");
+    throw new Error("eip712Domain() returned empty name/version; refusing to sign a guessed EIP-712 domain");
   }
   const val = { name, version };
-  permitDomainCache.set(key, val);
+  eip712DomainCache.set(key, val);
   return val;
+}
+
+/** @deprecated use readEip712Domain — kept for backward compatibility. */
+export const readPermitDomain = readEip712Domain;
+
+const PERMIT_NONCE_ABI = [
+  {
+    inputs: [{ name: "owner", type: "address" }],
+    name: "nonces",
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+] as const;
+
+/**
+ * Read a token's current EIP-2612 permit nonce for `owner`.
+ */
+export async function readPermitNonce(
+  publicClient: PublicClient,
+  token: Address,
+  owner: Address,
+): Promise<bigint> {
+  const n = await publicClient.readContract({
+    address: token,
+    abi: PERMIT_NONCE_ABI,
+    functionName: "nonces",
+    args: [owner],
+  });
+  return n as bigint;
 }
 
 /**
@@ -112,6 +144,7 @@ export async function signPermit({
   spender,
   value,
   chainId,
+  nonceOverride,
 }: {
   walletClient: WalletClient;
   publicClient: PublicClient;
@@ -123,28 +156,19 @@ export async function signPermit({
   spender: Address;
   value: bigint;
   chainId: number;
+  /** Explicit permit nonce; if omitted, read fresh from chain. Used to allocate
+   *  sequential nonces when one flow signs multiple permits on the same token. */
+  nonceOverride?: bigint;
 }): Promise<PermitData> {
   const owner = walletClient.account!.address;
-  const { name: domainName, version: domainVersion } = await readPermitDomain(
+  const { name: domainName, version: domainVersion } = await readEip712Domain(
     publicClient,
     tokenAddress,
   );
 
-  // Read current permit nonce from chain
-  const nonce = await publicClient.readContract({
-    address: tokenAddress,
-    abi: [
-      {
-        inputs: [{ name: "owner", type: "address" }],
-        name: "nonces",
-        outputs: [{ name: "", type: "uint256" }],
-        stateMutability: "view",
-        type: "function",
-      },
-    ] as const,
-    functionName: "nonces",
-    args: [owner],
-  });
+  // Permit nonce: caller-provided (for sequential allocation when a flow signs
+  // multiple permits on the same token) or read fresh from chain.
+  const nonce = nonceOverride ?? (await readPermitNonce(publicClient, tokenAddress, owner));
 
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1 hour
 

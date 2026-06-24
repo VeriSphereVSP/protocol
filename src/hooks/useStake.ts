@@ -3,7 +3,7 @@ import { useState, useCallback } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { encodeFunctionData, parseUnits, type Address } from "viem";
 import { useMetaTx } from "./useMetaTx.js";
-import { signPermit, fetchAllowance } from "./relay.js";
+import { fetchAllowance } from "./relay.js";
 import { StakeEngineABI, VSPTokenABI } from "../abis.js";
 import { getAddresses } from "../addresses/index.js";
 import type { ClaimState } from "./types.js";
@@ -38,12 +38,11 @@ export function useStake() {
       );
       if (currentAllowance >= amountWei) return undefined;
       window.dispatchEvent(new CustomEvent("verisphere:toast", { detail: { message: "Step 1: Approve token access (sign in wallet)", type: "info" } }));
-      return signPermit({
-        walletClient, publicClient,
+      return {
         tokenAddress: addresses.VSPToken as Address,
         spender: addresses.StakeEngine as Address,
-        value: amountWei * 2n, chainId: chain.id,
-      });
+        value: amountWei * 2n,
+      };
     },
     [userAddress, publicClient, walletClient, chain],
   );
@@ -80,7 +79,7 @@ export function useStake() {
         });
         const result = await sendMetaTx(
           addresses.StakeEngine as Address, calldata,
-          { gasLimit: 800_000, permit },
+          { gasLimit: 800_000, permitSpec: permit },
         );
         setTxHash(result.tx_hash);
         if (result.claim) { setClaimState(result.claim); return result.claim; }

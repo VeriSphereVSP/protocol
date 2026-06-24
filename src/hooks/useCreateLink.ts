@@ -3,7 +3,7 @@ import { useState, useCallback } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { encodeFunctionData, type Address } from "viem";
 import { useMetaTx } from "./useMetaTx.js";
-import { signPermit, fetchAllowance } from "./relay.js";
+import { fetchAllowance } from "./relay.js";
 import { PostRegistryABI } from "../abis.js";
 import { getAddresses } from "../addresses/index.js";
 
@@ -31,12 +31,11 @@ export function useCreateLink() {
         API_BASE, userAddress, addresses.PostRegistry,
       );
       if (currentAllowance >= DEFAULT_POSTING_FEE) return undefined;
-      return signPermit({
-        walletClient, publicClient,
+      return {
         tokenAddress: addresses.VSPToken as Address,
         spender: addresses.PostRegistry as Address,
-        value: DEFAULT_POSTING_FEE * 10n, chainId: chain.id,
-      });
+        value: DEFAULT_POSTING_FEE * 10n,
+      };
     },
     [userAddress, publicClient, walletClient, chain],
   );
@@ -55,7 +54,7 @@ export function useCreateLink() {
         });
         const result = await sendMetaTx(
           addresses.PostRegistry as Address, calldata,
-          { gasLimit: 1_000_000, permit },
+          { gasLimit: 1_000_000, permitSpec: permit },
         );
         return result.tx_hash;
       } catch (err: any) {

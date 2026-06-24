@@ -3,7 +3,7 @@ import { useState, useCallback } from "react";
 import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { encodeFunctionData, type Address } from "viem";
 import { useMetaTx } from "./useMetaTx.js";
-import { signPermit, fetchAllowance, fetchBalance, checkClaimOnChain } from "./relay.js";
+import { fetchAllowance, fetchBalance, checkClaimOnChain } from "./relay.js";
 import { PostRegistryABI } from "../abis.js";
 import { getAddresses } from "../addresses/index.js";
 import type { RelayResponse, ClaimState, SimilarClaim } from "./types.js";
@@ -62,12 +62,11 @@ export function useCreateClaim() {
       );
       if (currentAllowance >= DEFAULT_POSTING_FEE) return undefined;
       window.dispatchEvent(new CustomEvent("verisphere:toast", { detail: { message: "Step 1: Approve token access (sign in wallet)", type: "info" } }));
-      return signPermit({
-        walletClient, publicClient,
+      return {
         tokenAddress: addresses.VSPToken as Address,
         spender: addresses.PostRegistry as Address,
-        value: DEFAULT_POSTING_FEE * 10n, chainId: chain.id,
-      });
+        value: DEFAULT_POSTING_FEE * 10n,
+      };
     },
     [userAddress, publicClient, walletClient, chain],
   );
@@ -182,7 +181,7 @@ export function useCreateClaim() {
 
         const result: RelayResponse = await sendMetaTx(
           addresses.PostRegistry as Address, calldata,
-          { gasLimit: 2_000_000, permit },
+          { gasLimit: 2_000_000, permitSpec: permit },
         );
 
         // Check if the relay detected a duplicate (belt-and-suspenders)

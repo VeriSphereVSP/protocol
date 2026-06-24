@@ -20,7 +20,7 @@ import { useWalletClient, usePublicClient, useAccount } from "wagmi";
 import type { Hex, Address } from "viem";
 import { getAddresses } from "../addresses/index.js";
 import { VSPTokenABI } from "../abis.js";
-import { fetchNonce, signPermit, submitRelayAsync } from "./relay.js";
+import { fetchNonce, signPermit, submitRelayAsync, readPermitNonce, readEip712Domain } from "./relay.js";
 // patch_bundle04_5_p4_useMetaTx_rewire
 import { waitForTxConfirmation } from "./useTxConfirmation.js";
 import type { RelayResponse, PermitData } from "./types.js";
@@ -59,7 +59,7 @@ export function useMetaTx() {
     async (
       targetContract: Address,
       calldata: Hex,
-      options?: { gasLimit?: number; value?: number; permit?: PermitData },
+      options?: { gasLimit?: number; value?: number; permitSpec?: { tokenAddress: Address; spender: Address; value: bigint } },
     ): Promise<RelayResponse> => {
       if (!walletClient || !publicClient || !chain)
         throw new Error("Wallet not connected");
@@ -68,6 +68,16 @@ export function useMetaTx() {
       const addresses = getAddresses(chain.id);
       const nonce = await fetchNonce(API_BASE, userAddress);
       const deadline = Math.floor(Date.now() / 1000) + 300;
+
+      // Sequential permit-nonce allocation: the fee permit and the posting
+      // permit are both EIP-2612 permits on VSPToken and must use consecutive
+      // nonces in execution order (fee, then posting), or the second reverts
+      // ERC2612InvalidSigner. Read the base nonce once; hand out base, base+1.
+      let permitNonce = await readPermitNonce(
+        publicClient,
+        addresses.VSPToken as Address,
+        userAddress,
+      );
 
       const forwardRequest = {
         from: userAddress,
@@ -107,6 +117,7 @@ export function useMetaTx() {
             spender: addresses.Forwarder as Address,
             value: APPROVAL_AMOUNT,
             chainId: chain.id,
+            nonceOverride: permitNonce,
           });
           const execRes = await fetch(`${API_BASE}/mm/execute-permit`, {
             method: "POST",
@@ -127,18 +138,42 @@ export function useMetaTx() {
             throw new Error(`Permit execution failed: ${err}`);
           }
           await new Promise((r) => setTimeout(r, 3000));
+          permitNonce += 1n; // fee permit consumed this nonce
         }
       }
+
+      // Posting permit (PostRegistry/StakeEngine spend) — signed HERE, after any
+      // fee permit, so it gets the next sequential nonce (base+1 if the fee
+      // permit fired, base otherwise). This is what kills the nonce collision.
+      const postingPermit = options?.permitSpec
+        ? await signPermit({
+            walletClient,
+            publicClient,
+            tokenAddress: options.permitSpec.tokenAddress,
+            spender: options.permitSpec.spender,
+            value: options.permitSpec.value,
+            chainId: chain.id,
+            nonceOverride: permitNonce,
+          })
+        : undefined;
 
       window.dispatchEvent(
         new CustomEvent("verisphere:toast", {
           detail: { message: "Confirm transaction in wallet", type: "info" },
         }),
       );
+      // ForwardRequest EIP-712 domain read from the Forwarder's eip712Domain()
+      // (EIP-5267), read-or-throw — same anti-drift guard as the permit domain.
+      // Requires the deployed Forwarder to expose eip712Domain() (OZ
+      // ERC2771Forwarder extends EIP712, so it does).
+      const fwdDomain = await readEip712Domain(
+        publicClient,
+        addresses.Forwarder as Address,
+      );
       const signature = await walletClient.signTypedData({
         domain: {
-          name: "VerisphereForwarder",
-          version: "1",
+          name: fwdDomain.name,
+          version: fwdDomain.version,
           chainId: chain.id,
           verifyingContract: addresses.Forwarder as Address,
         },
@@ -159,7 +194,7 @@ export function useMetaTx() {
         API_BASE,
         relayRequest,
         signature,
-        options?.permit,
+        postingPermit,
       );
 
       // Server pre-flight may detect a duplicate claim before submission.
