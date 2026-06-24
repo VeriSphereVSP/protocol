@@ -18,16 +18,35 @@ const NETWORKS: Record<number, ContractAddresses> = {
   // 43114: mainnetJson as ContractAddresses,
 };
 
+// patch_runtime_address_hydration: addresses pushed in at runtime by the FE
+// (from the backend /api/contracts). Lets a fresh deploy stay correct without
+// rebuilding the baked fuji.json/dist. Empty until setRuntimeAddresses() runs.
+const RUNTIME: Record<number, ContractAddresses> = {};
+
+/**
+ * Hydrate/override the addresses for a chain at runtime. The FE calls this once
+ * with the backend's /api/contracts payload so getAddresses() returns the live
+ * deployment even if the baked dist is stale. Merges onto the baked set.
+ */
+export function setRuntimeAddresses(
+  chainId: number,
+  addrs: Partial<ContractAddresses> & Record<string, unknown>
+): void {
+  const base = (NETWORKS[chainId] ?? {}) as ContractAddresses;
+  RUNTIME[chainId] = { ...base, ...(RUNTIME[chainId] ?? {}), ...addrs } as ContractAddresses;
+}
+
 /**
  * Get contract addresses for a specific chain ID.
+ * Prefers runtime-hydrated addresses (setRuntimeAddresses) over the baked set.
  * Throws if the chain is not configured.
  */
 export function getAddresses(chainId: number): ContractAddresses {
-  const addrs = NETWORKS[chainId];
+  const addrs = RUNTIME[chainId] ?? NETWORKS[chainId];
   if (!addrs) {
     throw new Error(
       `No VeriSphere deployment for chain ${chainId}. ` +
-      `Available: ${Object.keys(NETWORKS).join(", ")}`
+      `Available: ${[...new Set([...Object.keys(NETWORKS), ...Object.keys(RUNTIME)])].join(", ")}`
     );
   }
   return addrs;

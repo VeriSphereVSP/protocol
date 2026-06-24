@@ -41,7 +41,6 @@ export function useStake() {
       return signPermit({
         walletClient, publicClient,
         tokenAddress: addresses.VSPToken as Address,
-        tokenName: "VeriSphere", tokenVersion: "1",
         spender: addresses.StakeEngine as Address,
         value: amountWei * 2n, chainId: chain.id,
       });

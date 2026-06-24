@@ -919,6 +919,19 @@ export const StakeEngineABI = [
   },
   {
     "type": "function",
+    "name": "MAX_STAKE_AMOUNT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MIN_SNAPSHOT_PERIOD",
     "inputs": [],
     "outputs": [
@@ -2088,6 +2101,38 @@ export const StakeEngineABI = [
   },
   {
     "type": "error",
+    "name": "SetStakeTargetTooLarge",
+    "inputs": [
+      {
+        "name": "target",
+        "type": "int256",
+        "internalType": "int256"
+      },
+      {
+        "name": "max",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "StakeAmountTooLarge",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "max",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "UUPSUnauthorizedCallContext",
     "inputs": []
   },
@@ -2135,6 +2180,32 @@ export const LinkGraphABI = [
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "MAX_INCOMING_LINKS_PER_CLAIM",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_OUTGOING_LINKS_PER_CLAIM",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -2609,6 +2680,22 @@ export const LinkGraphABI = [
   },
   {
     "type": "error",
+    "name": "IncomingLinkLimitExceeded",
+    "inputs": [
+      {
+        "name": "toClaimPostId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "currentCount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "InvalidInitialization",
     "inputs": []
   },
@@ -2631,6 +2718,22 @@ export const LinkGraphABI = [
     "type": "error",
     "name": "NotRegistry",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OutgoingLinkLimitExceeded",
+    "inputs": [
+      {
+        "name": "fromClaimPostId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "currentCount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
@@ -3335,6 +3438,26 @@ export const VSPTokenABI = [
         "name": "trustedForwarder_",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "inceptionTimestamp_",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "inceptionSupply_",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "growthBasePerYear_",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "stakeEngine_",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "nonpayable"
@@ -3348,6 +3471,71 @@ export const VSPTokenABI = [
         "name": "",
         "type": "bytes32",
         "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "GROWTH_BASE_PER_YEAR",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "INCEPTION_SUPPLY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "INCEPTION_TIMESTAMP",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "SECONDS_PER_YEAR",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "STAKE_ENGINE_ADDRESS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -3560,6 +3748,19 @@ export const VSPTokenABI = [
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "maxAllowedSupply",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -3826,6 +4027,37 @@ export const VSPTokenABI = [
   },
   {
     "type": "event",
+    "name": "MintExecuted",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "totalSupplyAfter",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxAllowedNow",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Transfer",
     "inputs": [
       {
@@ -4057,8 +4289,77 @@ export const VSPTokenABI = [
   },
   {
     "type": "error",
+    "name": "MintExceedsTimeWindowCap",
+    "inputs": [
+      {
+        "name": "totalSupplyAfter",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxAllowedNow",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NotBurner",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotGovernance",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NotInitializing",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotMinter",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PRBMath_MulDiv18_Overflow",
+    "inputs": [
+      {
+        "name": "x",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "y",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PRBMath_UD60x18_Exp2_InputTooBig",
+    "inputs": [
+      {
+        "name": "x",
+        "type": "uint256",
+        "internalType": "UD60x18"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PRBMath_UD60x18_Log_InputTooSmall",
+    "inputs": [
+      {
+        "name": "x",
+        "type": "uint256",
+        "internalType": "UD60x18"
+      }
+    ]
   },
   {
     "type": "error",

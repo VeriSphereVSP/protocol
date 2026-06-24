@@ -104,8 +104,6 @@ export function useMetaTx() {
             walletClient,
             publicClient,
             tokenAddress: addresses.VSPToken as Address,
-            tokenName: "VeriSphere",
-            tokenVersion: "1",
             spender: addresses.Forwarder as Address,
             value: APPROVAL_AMOUNT,
             chainId: chain.id,

@@ -48,16 +48,67 @@ export async function submitRelay(
   return await res.json();
 }
 
+// patch_permit_domain_from_chain: read the EIP-712 domain (name, version)
+// straight from the token's eip712Domain() (EIP-5267) so the signed domain can
+// never drift from the deployed token. A wrong hardcoded name does not steal
+// funds — it silently fails permit verification — so we read-or-throw and never
+// sign a guessed domain. Cached per token address.
+const EIP712_DOMAIN_ABI = [
+  {
+    type: "function",
+    name: "eip712Domain",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [
+      { name: "fields", type: "bytes1" },
+      { name: "name", type: "string" },
+      { name: "version", type: "string" },
+      { name: "chainId", type: "uint256" },
+      { name: "verifyingContract", type: "address" },
+      { name: "salt", type: "bytes32" },
+      { name: "extensions", type: "uint256[]" },
+    ],
+  },
+] as const;
+const permitDomainCache = new Map<string, { name: string; version: string }>();
+
 /**
- * Sign an EIP-2612 permit for a token.
- * Pure client-side operation — no network calls except reading the nonce.
+ * Read a token's EIP-712 domain (name, version) from eip712Domain() on-chain.
+ * Read-or-throw: never returns a guessed domain. Cached per token address.
+ */
+export async function readPermitDomain(
+  publicClient: PublicClient,
+  token: Address,
+): Promise<{ name: string; version: string }> {
+  const key = token.toLowerCase();
+  const hit = permitDomainCache.get(key);
+  if (hit) return hit;
+  if (!publicClient) throw new Error("No RPC client available to read permit domain");
+  const d: any = await publicClient.readContract({
+    address: token,
+    abi: EIP712_DOMAIN_ABI,
+    functionName: "eip712Domain",
+  });
+  const name = d[1] as string;
+  const version = d[2] as string;
+  if (!name || !version) {
+    throw new Error("eip712Domain() returned empty name/version; refusing to sign a guessed permit domain");
+  }
+  const val = { name, version };
+  permitDomainCache.set(key, val);
+  return val;
+}
+
+/**
+ * Sign an EIP-2612 permit for a token. The EIP-712 domain name/version are read
+ * from the token's eip712Domain() on-chain; tokenName/tokenVersion are accepted
+ * for backward compatibility but IGNORED (read-or-throw guards against drift).
+ * Pure client-side operation — reads the nonce and domain from chain.
  */
 export async function signPermit({
   walletClient,
   publicClient,
   tokenAddress,
-  tokenName,
-  tokenVersion,
   spender,
   value,
   chainId,
@@ -65,13 +116,19 @@ export async function signPermit({
   walletClient: WalletClient;
   publicClient: PublicClient;
   tokenAddress: Address;
-  tokenName: string;
-  tokenVersion: string;
+  /** @deprecated ignored — domain name is read from eip712Domain() on-chain */
+  tokenName?: string;
+  /** @deprecated ignored — domain version is read from eip712Domain() on-chain */
+  tokenVersion?: string;
   spender: Address;
   value: bigint;
   chainId: number;
 }): Promise<PermitData> {
   const owner = walletClient.account!.address;
+  const { name: domainName, version: domainVersion } = await readPermitDomain(
+    publicClient,
+    tokenAddress,
+  );
 
   // Read current permit nonce from chain
   const nonce = await publicClient.readContract({
@@ -94,8 +151,8 @@ export async function signPermit({
   const signature = await walletClient.signTypedData({
       account: walletClient.account!,
     domain: {
-      name: tokenName,
-      version: tokenVersion,
+      name: domainName,
+      version: domainVersion,
       chainId,
       verifyingContract: tokenAddress,
     },

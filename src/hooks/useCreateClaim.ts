@@ -65,7 +65,6 @@ export function useCreateClaim() {
       return signPermit({
         walletClient, publicClient,
         tokenAddress: addresses.VSPToken as Address,
-        tokenName: "VeriSphere", tokenVersion: "1",
         spender: addresses.PostRegistry as Address,
         value: DEFAULT_POSTING_FEE * 10n, chainId: chain.id,
       });

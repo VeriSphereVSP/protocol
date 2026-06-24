@@ -29,7 +29,7 @@ export {
 } from "./constants.js";
 
 // Deployment addresses (written by post-deploy.sh)
-export { FUJI_ADDRESSES, getAddresses, SUPPORTED_CHAINS } from "./addresses/index.js";
+export { FUJI_ADDRESSES, getAddresses, setRuntimeAddresses, SUPPORTED_CHAINS } from "./addresses/index.js";
 
 // Server-side ethers client (Node.js / backend use)
 export { ProtocolClient } from "./client.js";
