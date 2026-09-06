@@ -1048,6 +1048,19 @@ export const StakeEngineABI = [
   },
   {
     "type": "function",
+    "name": "TRACKED_POSTS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "UPGRADE_INTERFACE_VERSION",
     "inputs": [],
     "outputs": [
@@ -1200,11 +1213,6 @@ export const StakeEngineABI = [
       },
       {
         "name": "weightedPosition",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "entryEpoch",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -1402,6 +1410,19 @@ export const StakeEngineABI = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "refreshSMax",
+    "inputs": [
+      {
+        "name": "postId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -1877,37 +1898,6 @@ export const StakeEngineABI = [
   },
   {
     "type": "event",
-    "name": "PositionsRescaled",
-    "inputs": [
-      {
-        "name": "postId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "side",
-        "type": "uint8",
-        "indexed": false,
-        "internalType": "uint8"
-      },
-      {
-        "name": "oldMax",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      },
-      {
-        "name": "newCeiling",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "PostUpdated",
     "inputs": [
       {
@@ -1987,6 +1977,31 @@ export const StakeEngineABI = [
       },
       {
         "name": "newRate",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SMaxRefreshed",
+    "inputs": [
+      {
+        "name": "postId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "postTotal",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "sMaxAfter",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"

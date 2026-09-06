@@ -90,6 +90,16 @@ export function useMetaTx() {
       };
 
       // One-time forwarder VSP allowance (ERC-2612 permit).
+      // patch_relay_permit: the fee permit used to execute EAGERLY via
+      // POST /api/mm/execute-permit — an MM-prefixed route retired by the
+      // Phase 4 410 (and its executor was MM-wallet-funded, which dies at
+      // Phase 5 anyway). The relay endpoint natively accepts fee_permit in
+      // the request body (relay-wallet-funded, guard-ordered), so the fee
+      // permit now RIDES THE RELAY REQUEST instead. Server executes
+      // body.permit (posting) BEFORE body.fee_permit, so nonces are:
+      // posting = base N, fee = N+1 — the reverse of the old eager order.
+      let needFeePermit = false;
+      const APPROVAL_AMOUNT = BigInt("10000000000000000000000"); // 10,000 VSP
       if (addresses.Forwarder) {
         const currentAllowance = (await publicClient.readContract({
           address: addresses.VSPToken as Address,
@@ -99,7 +109,6 @@ export function useMetaTx() {
         })) as bigint;
 
         const MIN_ALLOWANCE = BigInt("10000000000000000000"); // 10 VSP
-        const APPROVAL_AMOUNT = BigInt("10000000000000000000000"); // 10,000 VSP
         if (currentAllowance < MIN_ALLOWANCE) {
           window.dispatchEvent(
             new CustomEvent("verisphere:toast", {
@@ -110,35 +119,7 @@ export function useMetaTx() {
               },
             }),
           );
-          const permit = await signPermit({
-            walletClient,
-            publicClient,
-            tokenAddress: addresses.VSPToken as Address,
-            spender: addresses.Forwarder as Address,
-            value: APPROVAL_AMOUNT,
-            chainId: chain.id,
-            nonceOverride: permitNonce,
-          });
-          const execRes = await fetch(`${API_BASE}/mm/execute-permit`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              token: addresses.VSPToken,
-              owner: userAddress,
-              spender: addresses.Forwarder,
-              value: APPROVAL_AMOUNT.toString(),
-              deadline: permit.deadline,
-              v: permit.v,
-              r: permit.r,
-              s: permit.s,
-            }),
-          });
-          if (!execRes.ok) {
-            const err = await execRes.text();
-            throw new Error(`Permit execution failed: ${err}`);
-          }
-          await new Promise((r) => setTimeout(r, 3000));
-          permitNonce += 1n; // fee permit consumed this nonce
+          needFeePermit = true; // signed AFTER the posting permit (nonce order)
         }
       }
 
@@ -154,6 +135,20 @@ export function useMetaTx() {
             value: options.permitSpec.value,
             chainId: chain.id,
             nonceOverride: permitNonce,
+          })
+        : undefined;
+
+      // Fee permit rides the relay body (fee_permit); the server executes it
+      // AFTER the posting permit, so it takes the next sequential nonce.
+      const feePermit = needFeePermit
+        ? await signPermit({
+            walletClient,
+            publicClient,
+            tokenAddress: addresses.VSPToken as Address,
+            spender: addresses.Forwarder as Address,
+            value: APPROVAL_AMOUNT,
+            chainId: chain.id,
+            nonceOverride: postingPermit ? permitNonce + 1n : permitNonce,
           })
         : undefined;
 
@@ -195,6 +190,7 @@ export function useMetaTx() {
         relayRequest,
         signature,
         postingPermit,
+        feePermit,
       );
 
       // Server pre-flight may detect a duplicate claim before submission.
